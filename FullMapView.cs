@@ -301,28 +301,31 @@ namespace ScheduleOneNavigator
         static Font cachedFont;
         static bool loggedSpriteDiag;
 
+        // Reachable from PhoneIntegration.cs's static Harmony patch, which has
+        // no other way to get at the running instance (opening is now driven
+        // by the game's own MapApp.SetOpen, not our own key handling below).
+        internal static FullMapView Instance { get; private set; }
+
         public FullMapView(RoutePlanner routePlanner)
         {
             this.routePlanner = routePlanner;
+            Instance = this;
         }
 
         public void Tick()
         {
-            // KeyCode.Hash (Unity's legacy-Input code for '#') doesn't reliably
-            // arrive under Proton/Wine on non-US keyboard layouts (same class of
-            // issue as GRAVE previously not registering for the dictation
-            // hotkey - see session notes). Input.inputString reflects the
-            // OS-translated typed character instead of a raw scancode, so it
-            // isn't affected by that translation gap; check both.
-            if (Input.GetKeyDown(KeyCode.Hash) || Input.inputString.IndexOf('#') >= 0)
-                SetVisible(!visible);
+            CustomizeMapAppIcon();
 
             if (!visible)
                 return;
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                SetVisible(false);
+                // Route through the real app's own close path (see
+                // PhoneIntegration.cs) instead of calling SetVisible directly,
+                // so MapApp's own isOpen/bookkeeping stays consistent with
+                // what's actually on screen.
+                MapApp.Instance?.SetOpen(false);
                 return;
             }
 
@@ -449,15 +452,15 @@ namespace ScheduleOneNavigator
                 HideAllMarkers(propertyMarkers);
             }
 
-            // Back to left click (2026-09-19) - middle click was a working
-            // sidestep for left-click-also-attacks (four targeted fixes
-            // before it: Equip clearing, PunchController, GraphicRaycaster,
-            // all confirmed live to do nothing), but Phone.ActiveApp (set in
-            // SetVisible - see its comment) is a much likelier candidate for
-            // the game's actual "is an app/menu open" gate, since the native
-            // phone app doesn't have this problem and nothing we'd tried
-            // before touched that field at all. Revert to middle click (see
-            // session notes 2026-09-19) if this turns out not to fix it.
+            // Left click (2026-09-19) - middle click was a working sidestep
+            // for left-click-also-attacks while this was our own standalone
+            // overlay (targeted fixes tried before it - Equip clearing,
+            // PunchController, GraphicRaycaster, Phone.ActiveApp - all
+            // confirmed live to do nothing). Now that opening is routed
+            // through the real MapApp.SetOpen (see PhoneIntegration.cs),
+            // whatever the native phone relies on to block attacks while an
+            // app is open should apply to us too - if it turns out not to,
+            // switching back to middle click is the known-working fallback.
             if (Input.GetMouseButtonDown(0))
             {
                 // Diagnostics (2026-09-19) - capture punch-related state at
@@ -2192,7 +2195,53 @@ namespace ScheduleOneNavigator
             return rt;
         }
 
-        void SetVisible(bool value)
+        bool mapAppIconCustomized;
+
+        // Relabels the native phone's Map app tile into our own "N" icon -
+        // appIconButton only exists once the home screen has actually
+        // generated it (native, timing unknown), so this just polls each
+        // tick until it shows up, then runs once. See PhoneIntegration.cs
+        // for the other half (MapApp.SetOpen redirected to our SetVisible).
+        void CustomizeMapAppIcon()
+        {
+            if (mapAppIconCustomized)
+                return;
+
+            MapApp mapApp = MapApp.Instance;
+            if (mapApp == null || mapApp.appIconButton == null)
+                return;
+            mapAppIconCustomized = true;
+
+            mapApp.AppName = "Navigator";
+            mapApp.IconLabel = "N";
+
+            Image iconImage = mapApp.appIconButton.image;
+            if (iconImage != null)
+            {
+                iconImage.sprite = null;
+                iconImage.color = TabActiveColor;
+            }
+
+            GameObject labelGO = new GameObject("NavigatorIconLabel");
+            labelGO.transform.SetParent(mapApp.appIconButton.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = Vector2.zero;
+            labelRT.anchorMax = Vector2.one;
+            labelRT.offsetMin = Vector2.zero;
+            labelRT.offsetMax = Vector2.zero;
+            Text label = labelGO.AddComponent<Text>();
+            label.font = GetFont();
+            label.text = "N";
+            label.fontSize = 36;
+            label.fontStyle = FontStyle.Bold;
+            label.color = Color.white;
+            label.alignment = TextAnchor.MiddleCenter;
+        }
+
+        // Called only from PhoneIntegration.cs's Harmony postfix on
+        // MapApp.SetOpen now - opening/closing is driven by the real phone
+        // app, not a key press (see Tick()).
+        internal void SetVisible(bool value)
         {
             visible = value;
             if (visible)
@@ -2218,12 +2267,11 @@ namespace ScheduleOneNavigator
                 Cursor.visible = true;
 
                 // A click on our map must not also register as an attack in
-                // the game world underneath (see Tick() and the
-                // Phone.ActiveApp comment below - four earlier fixes here
-                // didn't stop it, briefly worked around by moving our own
-                // clicks to the middle mouse button instead of solving it),
-                // and the player shouldn't keep walking/looking around while
-                // the tablet covers the screen.
+                // the game world underneath (see Tick() - several earlier
+                // fixes here didn't stop it, briefly worked around by moving
+                // our own clicks to the middle mouse button instead of
+                // solving it), and the player shouldn't keep walking/looking
+                // around while the tablet covers the screen.
                 // PlayerMovement.CanMove, Phone.SetIsOpen (reusing the same
                 // gameplay-input gate the game's own phone app relies on) and
                 // the PlayerInventory switches below are the targeted gates
@@ -2244,15 +2292,12 @@ namespace ScheduleOneNavigator
                     PlayerMovement.Instance.CanMove = false;
                 if (Phone.InstanceExists)
                     Phone.Instance.SetIsOpen(true);
-                // Phone.IsOpen (above) is probably not what the game's own
-                // combat code actually checks - Phone.ActiveApp (a static
-                // GameObject, confirmed settable via decompile) backs
-                // Phone.IsAnyAppOpen, which reads as a much likelier
-                // candidate for that gate, and we'd simply never set it
-                // before now. Test (2026-09-19): set it to our own root so
-                // the game considers "an app" open the same way it would for
-                // any of its native ones.
-                Phone.ActiveApp = rootGO;
+                // Phone.ActiveApp is no longer set to our own rootGO here
+                // (2026-09-19) - now that opening is driven by the real
+                // MapApp.SetOpen (see PhoneIntegration.cs), MapApp/Phone
+                // manage that bookkeeping themselves; setting it to a
+                // GameObject that isn't a real app's screen risked confusing
+                // whatever reads it after us.
                 // HotbarEnabled/SetEquippingEnabled(false) gate the
                 // mouse-wheel-changes-hotbar issue and switching equipment
                 // mid-map, but NOT using whatever is already equipped - a map
@@ -2325,8 +2370,6 @@ namespace ScheduleOneNavigator
                     PlayerMovement.Instance.CanMove = true;
                 if (Phone.InstanceExists)
                     Phone.Instance.SetIsOpen(false);
-                if (Phone.ActiveApp == rootGO)
-                    Phone.ActiveApp = null;
                 if (PlayerInventory.InstanceExists)
                 {
                     PlayerInventory.Instance.Equip(savedEquippedSlot);
@@ -2351,11 +2394,9 @@ namespace ScheduleOneNavigator
             // GraphicRaycaster is invisible to Unity's EventSystem), though
             // it turned out NOT to be what was causing left-click-while-
             // tablet-open to also register as a world attack - that guess
-            // (2026-09-19) tested clean but didn't fix the bug. The actual
-            // fix was routing our own click handling through the middle
-            // mouse button instead (see Tick()), sidestepping whatever the
-            // real cause is rather than continuing to guess against
-            // decompiled signatures with no visible method bodies.
+            // (2026-09-19) tested clean but didn't fix the bug on its own.
+            // Left click was restored once opening moved to the real
+            // MapApp.SetOpen path (see PhoneIntegration.cs and Tick()).
             canvasGO.AddComponent<GraphicRaycaster>();
             rootGO = canvasGO;
 
