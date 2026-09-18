@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "1.0.0", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.2.0", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator
@@ -41,7 +41,6 @@ namespace ScheduleOneNavigator
         RectTransform minimapRoot;
         RectTransform playerArrow;
 
-        Sprite customerSprite;
         Sprite customerAuraSprite;
         Sprite otherPlayerSprite;
         RectTransform destinationMarker;
@@ -205,11 +204,8 @@ namespace ScheduleOneNavigator
             mapRT.offsetMax = Vector2.zero;
             mapGO.AddComponent<RawImage>().texture = minimapRT;
 
-            customerSprite = CreateCircleSprite(24, CustomerColor);
-            // Subtle aura for customers without a currently active deal (see
-            // RefreshCustomerMarkers) - low peak alpha, soft radial falloff,
-            // noticeably larger than the dot itself so it reads as a glow
-            // rather than a second, harder dot.
+            // Subtle aura marking recruitable NPCs (see RefreshCustomerMarkers)
+            // - low peak alpha, soft radial falloff, no solid dot.
             customerAuraSprite = CreateGlowSprite(48, new Color(CustomerColor.r, CustomerColor.g, CustomerColor.b, 0.3f));
             otherPlayerSprite = CreateCircleSprite(24, OtherPlayerColor);
             routeDotSprite = CreateCircleSprite(16, Color.white);
@@ -268,21 +264,25 @@ namespace ScheduleOneNavigator
             playerArrow.localEulerAngles = new Vector3(0f, 0f, -yaw);
         }
 
+        // Shows who's still recruitable, not who's already a customer -
+        // Customer.LockedCustomers (confirmed via decompile) is every
+        // Customer NPC not yet unlocked, i.e. exactly "could be recruited
+        // right now". Replaced the old dot-per-unlocked-customer display
+        // 2026-09-19 per user request - once someone's actually recruited,
+        // the minimap doesn't need to keep pointing at them, the Deals tab
+        // covers that.
         void RefreshCustomerMarkers()
         {
-            // Only customers the player has actually unlocked/discovered -
-            // showing every NPC on the street was too noisy and not very
-            // meaningful for the dealing gameplay.
-            var unlockedList = Customer.UnlockedCustomers;
-            HashSet<Customer> unlocked = new HashSet<Customer>();
-            if (unlockedList != null)
-                foreach (Customer c in unlockedList)
+            var lockedList = Customer.LockedCustomers;
+            HashSet<Customer> recruitable = new HashSet<Customer>();
+            if (lockedList != null)
+                foreach (Customer c in lockedList)
                     if (c != null)
-                        unlocked.Add(c);
+                        recruitable.Add(c);
 
             List<Customer> stale = null;
             foreach (var kvp in customerMarkers)
-                if (kvp.Key == null || !unlocked.Contains(kvp.Key))
+                if (kvp.Key == null || !recruitable.Contains(kvp.Key))
                     (stale ??= new List<Customer>()).Add(kvp.Key);
             if (stale != null)
                 foreach (var key in stale)
@@ -291,25 +291,9 @@ namespace ScheduleOneNavigator
                     customerMarkers.Remove(key);
                 }
 
-            foreach (Customer customer in unlocked)
+            foreach (Customer customer in recruitable)
                 if (!customerMarkers.ContainsKey(customer))
                     customerMarkers[customer] = CreateCustomerMarkerIcon();
-
-            // Customers with a currently active deal get just the plain dot
-            // (unchanged); everyone else unlocked ("potential" customers)
-            // gets a subtle aura too - toggled every refresh (not just on
-            // creation) so it reacts live to a deal starting/ending.
-            HashSet<Customer> dealCustomers = new HashSet<Customer>();
-            foreach (DealInfo deal in DealPlanner.GatherActiveDeals())
-                if (deal.Customer != null)
-                    dealCustomers.Add(deal.Customer);
-
-            foreach (var kvp in customerMarkers)
-            {
-                Transform aura = kvp.Value.Find("Aura");
-                if (aura != null)
-                    aura.gameObject.SetActive(!dealCustomers.Contains(kvp.Key));
-            }
         }
 
         // Other connected players, shown as a green dot - added 2026-09-19
@@ -358,15 +342,6 @@ namespace ScheduleOneNavigator
             Image auraImg = auraGO.AddComponent<Image>();
             auraImg.sprite = customerAuraSprite;
             auraImg.color = Color.white;
-
-            GameObject dotGO = new GameObject("Dot");
-            dotGO.transform.SetParent(containerRT, false);
-            RectTransform dotRT = dotGO.AddComponent<RectTransform>();
-            dotRT.sizeDelta = new Vector2(MarkerIconSize, MarkerIconSize);
-            dotRT.anchorMin = dotRT.anchorMax = new Vector2(0.5f, 0.5f);
-            Image dotImg = dotGO.AddComponent<Image>();
-            dotImg.sprite = customerSprite;
-            dotImg.color = Color.white;
 
             return containerRT;
         }

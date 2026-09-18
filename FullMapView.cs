@@ -1200,8 +1200,15 @@ namespace ScheduleOneNavigator
 
             foreach (Player p in others)
             {
-                if (otherPlayerMarkers.ContainsKey(p))
+                if (otherPlayerMarkers.TryGetValue(p, out RectTransform existingRt))
+                {
+                    // Name can arrive slightly after the Player object itself
+                    // over the network - keep it fresh, not just set once.
+                    Text existingLabel = existingRt.GetComponentInChildren<Text>();
+                    if (existingLabel != null)
+                        existingLabel.text = p.PlayerName;
                     continue;
+                }
 
                 GameObject go = new GameObject("OtherPlayerMarker");
                 go.transform.SetParent(viewport, false);
@@ -1210,6 +1217,23 @@ namespace ScheduleOneNavigator
                 rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.sizeDelta = new Vector2(OtherPlayerDotSize, OtherPlayerDotSize);
                 go.AddComponent<Image>().sprite = otherPlayerSprite;
+
+                GameObject labelGO = new GameObject("Name");
+                labelGO.transform.SetParent(go.transform, false);
+                RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+                labelRT.anchorMin = labelRT.anchorMax = new Vector2(0.5f, 0f);
+                labelRT.pivot = new Vector2(0.5f, 1f);
+                labelRT.sizeDelta = new Vector2(120f, 14f);
+                labelRT.anchoredPosition = new Vector2(0f, -2f);
+                Text label = labelGO.AddComponent<Text>();
+                label.font = GetFont();
+                label.text = p.PlayerName;
+                label.fontSize = 11;
+                label.color = Color.white;
+                label.alignment = TextAnchor.UpperCenter;
+                label.horizontalOverflow = HorizontalWrapMode.Overflow;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
+
                 otherPlayerMarkers[p] = rt;
             }
         }
