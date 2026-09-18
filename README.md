@@ -2,6 +2,8 @@
 
 A full-screen, self-contained map and navigation overlay for **Schedule I**, built on top of [MelonLoader](https://github.com/LavaGang/MelonLoader). Press `#` to open a tablet-style map with click-to-route pathfinding and tabs for your active deals, shops, businesses, and dealers/suppliers — plus a small always-on minimap in the corner of the HUD.
 
+**[Download the latest release](https://github.com/h0sti81/ScheduleOneNavigator/releases/latest)**
+
 ## Features
 
 - **Minimap** (top-right HUD): live top-down view centered on the player, with markers for your properties/businesses and unlocked customers.
@@ -21,7 +23,7 @@ MelonLoader works the same way whether you're on Windows or on Linux/Steam Deck 
 ## Installation
 
 1. Make sure MelonLoader is installed for Schedule I, and start the game at least once with it so the `Mods` folder gets created.
-2. Download `ScheduleOneNavigator.dll` from this mod page.
+2. Download `ScheduleOneNavigator.dll` from the [latest release](https://github.com/h0sti81/ScheduleOneNavigator/releases/latest).
 3. Open your Schedule I install folder:
    - **Steam (Windows/Linux/Steam Deck):** right-click **Schedule I** in your Steam library → **Manage** → **Browse local files**.
 4. Copy `ScheduleOneNavigator.dll` into the `Mods` subfolder (create it if it's missing — it usually already exists after step 1).
