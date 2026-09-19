@@ -892,16 +892,18 @@ namespace ScheduleOneNavigator
             }
         }
 
-        // Ambient/informational only, like the minimap's own version - no
-        // click handling, just a visual heads-up on who's still recruitable
-        // while looking at the Deals tab.
+        // Customer.LockedCustomers mixes NPCs recruitable right now with
+        // ones still blocked by some requirement (standing/reputation/etc.)
+        // - Customer.IsUnlockable() is the game's own answer to exactly that
+        // question (see the matching comment in ScheduleOneNavigator.cs's
+        // RefreshCustomerMarkers), so filtered to just the former.
         void RefreshRecruitableCustomerMarkers()
         {
             var lockedList = Customer.LockedCustomers;
             HashSet<Customer> recruitable = new HashSet<Customer>();
             if (lockedList != null)
                 foreach (Customer c in lockedList)
-                    if (c != null)
+                    if (c != null && c.IsUnlockable())
                         recruitable.Add(c);
 
             List<Customer> stale = null;

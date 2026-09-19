@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.4.0", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.5.0", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator
@@ -272,18 +272,20 @@ namespace ScheduleOneNavigator
 
         // Shows who's still recruitable, not who's already a customer -
         // Customer.LockedCustomers (confirmed via decompile) is every
-        // Customer NPC not yet unlocked, i.e. exactly "could be recruited
-        // right now". Replaced the old dot-per-unlocked-customer display
-        // 2026-09-19 per user request - once someone's actually recruited,
-        // the minimap doesn't need to keep pointing at them, the Deals tab
-        // covers that.
+        // Customer NPC not yet unlocked as a customer, but that mixes NPCs
+        // who could be recruited right now with ones still blocked by some
+        // requirement (standing/reputation/etc. - exact rule not visible,
+        // Il2Cpp method body). User couldn't tell the two apart on the map
+        // (2026-09-19) - Customer.IsUnlockable() is the game's own answer to
+        // exactly that question, so trust it instead of guessing at which
+        // native field encodes the requirement.
         void RefreshCustomerMarkers()
         {
             var lockedList = Customer.LockedCustomers;
             HashSet<Customer> recruitable = new HashSet<Customer>();
             if (lockedList != null)
                 foreach (Customer c in lockedList)
-                    if (c != null)
+                    if (c != null && c.IsUnlockable())
                         recruitable.Add(c);
 
             List<Customer> stale = null;
