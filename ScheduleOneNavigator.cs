@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.3.0", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.4.0", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator
@@ -41,6 +41,7 @@ namespace ScheduleOneNavigator
         RectTransform minimapRoot;
         RectTransform playerArrow;
 
+        Sprite customerSprite;
         Sprite customerAuraSprite;
         Sprite otherPlayerSprite;
         RectTransform destinationMarker;
@@ -204,9 +205,14 @@ namespace ScheduleOneNavigator
             mapRT.offsetMax = Vector2.zero;
             mapGO.AddComponent<RawImage>().texture = minimapRT;
 
-            // Subtle aura marking recruitable NPCs (see RefreshCustomerMarkers)
-            // - low peak alpha, soft radial falloff, no solid dot.
-            customerAuraSprite = CreateGlowSprite(48, new Color(CustomerColor.r, CustomerColor.g, CustomerColor.b, 0.3f));
+            // Aura + dot marking recruitable NPCs (see RefreshCustomerMarkers)
+            // - aura sized up and made less transparent 2026-09-19 per user
+            // request (250% size, higher peak alpha) since the original was
+            // too subtle to notice; dot re-added the same day so the exact
+            // NPC position is still visible under the aura, not just its
+            // general vicinity.
+            customerSprite = CreateCircleSprite(24, CustomerColor);
+            customerAuraSprite = CreateGlowSprite(48, new Color(CustomerColor.r, CustomerColor.g, CustomerColor.b, 0.65f));
             otherPlayerSprite = CreateCircleSprite(24, OtherPlayerColor);
             routeDotSprite = CreateCircleSprite(16, Color.white);
 
@@ -337,11 +343,20 @@ namespace ScheduleOneNavigator
             GameObject auraGO = new GameObject("Aura");
             auraGO.transform.SetParent(containerRT, false);
             RectTransform auraRT = auraGO.AddComponent<RectTransform>();
-            auraRT.sizeDelta = new Vector2(MarkerIconSize * 2.5f, MarkerIconSize * 2.5f);
+            auraRT.sizeDelta = new Vector2(MarkerIconSize * 6.25f, MarkerIconSize * 6.25f);
             auraRT.anchorMin = auraRT.anchorMax = new Vector2(0.5f, 0.5f);
             Image auraImg = auraGO.AddComponent<Image>();
             auraImg.sprite = customerAuraSprite;
             auraImg.color = Color.white;
+
+            GameObject dotGO = new GameObject("Dot");
+            dotGO.transform.SetParent(containerRT, false);
+            RectTransform dotRT = dotGO.AddComponent<RectTransform>();
+            dotRT.sizeDelta = new Vector2(MarkerIconSize, MarkerIconSize);
+            dotRT.anchorMin = dotRT.anchorMax = new Vector2(0.5f, 0.5f);
+            Image dotImg = dotGO.AddComponent<Image>();
+            dotImg.sprite = customerSprite;
+            dotImg.color = Color.white;
 
             return containerRT;
         }

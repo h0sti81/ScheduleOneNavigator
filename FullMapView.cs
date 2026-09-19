@@ -49,6 +49,7 @@ namespace ScheduleOneNavigator
         const int MaxRouteDots = 150;
         const float CustomerDotSize = 12.8f;
         const float CustomerClickPadding = 10f; // extra hit-test margin around each small marker, easier to click
+        const float CustomerAuraSize = CustomerDotSize * 6.25f; // matches the minimap's own recruitable-customer aura sizing
         const float DealPanelWidth = 300f;
         const float DealRowHeight = 66f;
         const float DealListTitleHeight = 30f;
@@ -123,6 +124,14 @@ namespace ScheduleOneNavigator
         readonly List<RectTransform> routeDotPool = new List<RectTransform>();
         readonly Dictionary<Customer, RectTransform> customerMarkers = new Dictionary<Customer, RectTransform>();
         Sprite customerSprite;
+
+        // Recruitable NPCs (Customer.LockedCustomers, not yet unlocked) shown
+        // as a red aura + dot on the Deals tab map - mirrors the minimap's
+        // own recruitable-customer aura (ScheduleOneNavigator.cs), added
+        // 2026-09-19 per user request so recruitment targets are visible on
+        // the tablet too, not just the small always-on minimap.
+        readonly Dictionary<Customer, RectTransform> recruitableCustomerMarkers = new Dictionary<Customer, RectTransform>();
+        Sprite customerAuraSprite;
 
         RectTransform dealListContainer;
         RectTransform dealListViewportRT;
@@ -381,12 +390,15 @@ namespace ScheduleOneNavigator
                 {
                     dealRefreshTimer = DealRefreshInterval;
                     RefreshDeals(); // also refreshes customerMarkers, see RefreshDeals
+                    RefreshRecruitableCustomerMarkers();
                 }
                 UpdateCustomerMarkers(posUtil);
+                UpdateRecruitableCustomerMarkers(posUtil);
             }
             else
             {
                 HideAllMarkers(customerMarkers);
+                HideAllMarkers(recruitableCustomerMarkers);
             }
 
             if (viewMode == MapViewMode.Shops)
@@ -507,7 +519,16 @@ namespace ScheduleOneNavigator
                         }
                         else
                         {
-                            HandleClick(posUtil, player, playerMapPos);
+                            Customer clickedRecruitable = FindClickedRecruitableCustomer(mousePos);
+                            if (clickedRecruitable != null)
+                            {
+                                MelonLogger.Msg($"[Minimap] FullMapView: recruitable customer marker clicked -> {clickedRecruitable.name}");
+                                routePlanner.SetDestination(clickedRecruitable.transform.position);
+                            }
+                            else
+                            {
+                                HandleClick(posUtil, player, playerMapPos);
+                            }
                         }
                     }
                 }
@@ -871,6 +892,76 @@ namespace ScheduleOneNavigator
             }
         }
 
+        // Ambient/informational only, like the minimap's own version - no
+        // click handling, just a visual heads-up on who's still recruitable
+        // while looking at the Deals tab.
+        void RefreshRecruitableCustomerMarkers()
+        {
+            var lockedList = Customer.LockedCustomers;
+            HashSet<Customer> recruitable = new HashSet<Customer>();
+            if (lockedList != null)
+                foreach (Customer c in lockedList)
+                    if (c != null)
+                        recruitable.Add(c);
+
+            List<Customer> stale = null;
+            foreach (var kvp in recruitableCustomerMarkers)
+                if (kvp.Key == null || !recruitable.Contains(kvp.Key))
+                    (stale ??= new List<Customer>()).Add(kvp.Key);
+            if (stale != null)
+                foreach (var key in stale)
+                {
+                    GameObject.Destroy(recruitableCustomerMarkers[key].gameObject);
+                    recruitableCustomerMarkers.Remove(key);
+                }
+
+            foreach (Customer customer in recruitable)
+            {
+                if (recruitableCustomerMarkers.ContainsKey(customer))
+                    continue;
+
+                GameObject containerGO = new GameObject("RecruitableCustomerMarker");
+                containerGO.transform.SetParent(viewport, false);
+                RectTransform containerRT = containerGO.AddComponent<RectTransform>();
+                containerRT.anchorMin = containerRT.anchorMax = new Vector2(0.5f, 0.5f);
+                containerRT.pivot = new Vector2(0.5f, 0.5f);
+                containerRT.sizeDelta = new Vector2(CustomerDotSize, CustomerDotSize);
+
+                GameObject auraGO = new GameObject("Aura");
+                auraGO.transform.SetParent(containerRT, false);
+                RectTransform auraRT = auraGO.AddComponent<RectTransform>();
+                auraRT.anchorMin = auraRT.anchorMax = new Vector2(0.5f, 0.5f);
+                auraRT.sizeDelta = new Vector2(CustomerAuraSize, CustomerAuraSize);
+                auraGO.AddComponent<Image>().sprite = customerAuraSprite;
+
+                GameObject dotGO = new GameObject("Dot");
+                dotGO.transform.SetParent(containerRT, false);
+                RectTransform dotRT = dotGO.AddComponent<RectTransform>();
+                dotRT.anchorMin = dotRT.anchorMax = new Vector2(0.5f, 0.5f);
+                dotRT.sizeDelta = new Vector2(CustomerDotSize, CustomerDotSize);
+                dotGO.AddComponent<Image>().sprite = customerSprite;
+
+                recruitableCustomerMarkers[customer] = containerRT;
+            }
+        }
+
+        void UpdateRecruitableCustomerMarkers(MapPositionUtility posUtil)
+        {
+            foreach (var kvp in recruitableCustomerMarkers)
+            {
+                Customer customer = kvp.Key;
+                RectTransform rt = kvp.Value;
+                if (customer == null)
+                {
+                    rt.gameObject.SetActive(false);
+                    continue;
+                }
+                Vector2 mapPos = posUtil.GetMapPosition(customer.transform.position);
+                rt.gameObject.SetActive(true);
+                rt.anchoredPosition = mapPos * zoom + panOffset;
+            }
+        }
+
         // Hit-tests a screen point against every currently visible customer
         // marker (with a bit of extra click padding, since the dots
         // themselves are small) and returns the closest match, or null.
@@ -888,6 +979,30 @@ namespace ScheduleOneNavigator
                 Vector2 markerScreenPos = RectTransformUtility.WorldToScreenPoint(null, rt.position);
                 float dist = Vector2.Distance(screenPoint, markerScreenPos);
                 float hitRadius = CustomerDotSize / 2f + CustomerClickPadding;
+                if (dist <= hitRadius && dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = kvp.Key;
+                }
+            }
+            return best;
+        }
+
+        // Same shape as FindClickedCustomer, but hit-tests against the much
+        // larger aura radius (not just the small dot inside it) since that's
+        // the visible affordance the player actually clicks on.
+        Customer FindClickedRecruitableCustomer(Vector2 screenPoint)
+        {
+            Customer best = null;
+            float bestDist = float.MaxValue;
+            foreach (var kvp in recruitableCustomerMarkers)
+            {
+                RectTransform rt = kvp.Value;
+                if (!rt.gameObject.activeSelf)
+                    continue;
+                Vector2 markerScreenPos = RectTransformUtility.WorldToScreenPoint(null, rt.position);
+                float dist = Vector2.Distance(screenPoint, markerScreenPos);
+                float hitRadius = CustomerAuraSize / 2f + CustomerClickPadding;
                 if (dist <= hitRadius && dist < bestDist)
                 {
                     bestDist = dist;
@@ -2501,6 +2616,7 @@ namespace ScheduleOneNavigator
             mapImage.raycastTarget = false; // clicks are polled directly via Input, not routed through the event system
 
             customerSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)CustomerDotSize * 2, CustomerDotColor);
+            customerAuraSprite = ScheduleOneNavigatorMod.CreateGlowSprite(48, new Color(CustomerDotColor.r, CustomerDotColor.g, CustomerDotColor.b, 0.65f));
             shopSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)ShopDotSize * 2, ShopDotColor);
             businessSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)BusinessDotSize * 2, BusinessDotColor);
             dealerSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)DealerDotSize * 2, DealerDotColor);
