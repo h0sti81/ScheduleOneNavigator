@@ -48,6 +48,7 @@ Doesn't modify save data or other mods' files. One exception: it repurposes the 
 
 ## Changelog
 
+- **v0.5** - Recruitable-customer markers are now filtered to NPCs the game actually considers recruitable right now (`Customer.IsUnlockable()`), instead of also showing ones still blocked by a standing/reputation requirement.
 - **v0.4** - Recruitable customers are now shown (red aura + dot) and clickable/routable on the tablet's Deals tab too, not just the minimap.
 - **v0.3** - The full map now opens as a real phone app (custom "N" icon) instead of a dedicated `#` hotkey. This also fixed a long-standing bug where clicking the map while it was open could make the player attack nearby NPCs.
 - **v0.2** - Fixed route tracking and arrival detection while driving a vehicle; other players are now shown as green dots (with name labels) on the full map; the minimap's customer aura now highlights recruitable NPCs instead of already-recruited ones.
