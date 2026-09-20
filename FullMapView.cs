@@ -56,6 +56,7 @@ namespace ScheduleOneNavigator
         const float DealButtonHeight = 40f;
         const float DealRefreshInterval = 1f;
         const float TabRowHeight = 32f;
+        const int TabColumns = 4;
         const float BusinessRowHeight = 40f;
         const float BusinessDotSize = 12.8f;
         const float BusinessClickPadding = 10f;
@@ -101,8 +102,10 @@ namespace ScheduleOneNavigator
         static readonly Color ShopRowColor = new Color(0.16f, 0.16f, 0.17f, 1f);
         static readonly Color DealerDotColor = new Color(0.95f, 0.85f, 0.2f, 0.95f); // gold, distinct from all other markers
         static readonly Color DealerDotColorLocked = new Color(0.5f, 0.47f, 0.35f, 0.7f); // dimmed gold - not yet unlocked
+        static readonly Color DealerDotColorUnlocked = new Color(0.6f, 0.6f, 0.62f, 0.9f); // grey - unlocked but not recruited (real Dealers only)
         static readonly Color DealerRowAvailableColor = new Color(0.16f, 0.28f, 0.17f, 1f); // mirrors DealRowFeasibleColor
         static readonly Color DealerRowUnavailableColor = new Color(0.16f, 0.16f, 0.17f, 1f); // mirrors DealRowInfeasibleColor
+        static readonly Color DealerRowUnlockedColor = new Color(0.2f, 0.2f, 0.21f, 1f); // grey - unlocked but not recruited (real Dealers only)
         static readonly Color PropertyDotColor = new Color(1f, 0.85f, 0.15f, 1f); // same yellow the small minimap used to use
         static readonly Color PropertyRowOwnedColor = new Color(0.16f, 0.28f, 0.17f, 1f);
         static readonly Color PropertyRowUnownedColor = new Color(0.16f, 0.16f, 0.17f, 1f);
@@ -157,6 +160,7 @@ namespace ScheduleOneNavigator
         Sprite businessSprite;
         readonly List<Business> currentBusinesses = new List<Business>();
         readonly List<(RectTransform rect, Business business)> businessRows = new List<(RectTransform, Business)>();
+        Business selectedBusiness;
         float businessRefreshTimer;
 
         // Shops tab - real retail locations (Gas Mart, hardware stores, Auto
@@ -171,6 +175,7 @@ namespace ScheduleOneNavigator
         Sprite shopSprite;
         readonly List<(Transform position, string name)> currentShops = new List<(Transform, string)>();
         readonly List<(RectTransform rect, Transform position, string name)> shopRows = new List<(RectTransform, Transform, string)>();
+        Transform selectedShop;
         float shopRefreshTimer;
         static readonly HashSet<string> loggedMissingShopPositions = new HashSet<string>();
 
@@ -207,10 +212,11 @@ namespace ScheduleOneNavigator
             // 86.76) was rejected live - TerrainGrid found it isolated in a
             // 1-cell region, disconnected from the main walkable area.)
             ["Casino"] = new Vector3(28.07f, 0.10f, 82.60f),
-            // Logged from a click on the correct spot, 2026-09-19 - see
-            // FullMapView click log: world (21.36, 5.45, -9.12), 4.5m from
-            // the player at the time; path resolved successfully.
-            ["Gas-Mart (Central)"] = new Vector3(21.36f, 5.45f, -9.12f),
+            // Superseded 2026-09-20 - the (21.36, 5.45, -9.12) attempt still
+            // wasn't perfect. New click log: world (17.52, 0.10, -14.88),
+            // 47.5m from the player, snap offset 0.7m - repeatedly stable
+            // over several seconds afterward.
+            ["Gas-Mart (Central)"] = new Vector3(17.52f, 0.10f, -14.88f),
             // Logged from a click on the correct spot, 2026-09-19 - see
             // FullMapView click log: world (82.72, 0.00, -8.16), 1.7m from
             // the player at the time.
@@ -221,6 +227,46 @@ namespace ScheduleOneNavigator
             // the player with a 16.4m pathfinding snap offset; this one has
             // only a 0.7m snap offset.
             ["Barbershop"] = new Vector3(-22.43f, 0.10f, 32.42f),
+            // Superseded 2026-09-20 - the (-24.03, 10.58, 12.29) attempt
+            // repeatedly failed pathfinding from right outside the shop
+            // ("regions are disconnected", 8902 vs 45 cells). Replaced with
+            // the player's own tracked position (-21.28, 0.99, 12.43),
+            // standing on the main connected region.
+            ["Thrifty Threads"] = new Vector3(-21.28f, 0.99f, 12.43f),
+            // Refined 2026-09-20 - superseded the first (-39.37, -2.10,
+            // 33.70) attempt with a more precise click, X/Z (-39.69, 28.59)
+            // from FullMapView click log: world (-39.69, 7.40, 28.59). Y
+            // again deliberately not taken from the click - every click near
+            // this shop resolves to an elevated, disconnected 1-cell region
+            // (confirmed repeatedly, see the "Pathfinding could not find a
+            // route" log entries at 16:37-16:38), while the player's own
+            // tracked position standing at the entrance (-1.14) sits on the
+            // main 6438-cell connected region.
+            ["Arms Dealer"] = new Vector3(-39.69f, -1.14f, 28.59f),
+            // X/Z from a click on the correct spot, 2026-09-20 - see
+            // FullMapView click log: world (-60.78, 7.12, 27.31), 8.8m from
+            // the player. Y again taken from the player's own tracked
+            // position (-1.13) instead of the click - same disconnected
+            // elevated-region pattern as Arms Dealer above.
+            ["Oscar's Store"] = new Vector3(-60.78f, -1.13f, 27.31f),
+            // ROOT CAUSE found 2026-09-20: every previous coordinate fix for
+            // this shop silently did nothing, because the key was wrong the
+            // entire time - the real ShopInterface.ShopName has an apostrophe
+            // ("Bleuball's Boutique", confirmed via the shop-name-in-log
+            // change earlier this session: "shop row clicked -> Bleuball's
+            // Boutique (0.00, 0.00, 0.00)"), so every TryGetValue lookup
+            // against the old "Bleuballs Boutique" key missed and silently
+            // fell back to the collapsing s.transform UI-panel position.
+            // Coordinate (70.68, 1.07, -7.10) is the player's own tracked
+            // position while standing at the shop (from a follow-up click's
+            // pathfinding-failure log, "Destination reached" walk), kept
+            // as-is - only the key was ever wrong.
+            ["Bleuball's Boutique"] = new Vector3(70.68f, 1.07f, -7.10f),
+            // Logged from a click on the correct spot, 2026-09-20 - see
+            // FullMapView click log: world (104.13, 0.10, 24.75), 5.4m from
+            // the player. Raw click position pathed fine (0.7m snap offset)
+            // - no player-elevation substitution needed here.
+            ["Handy Hank's Hardware"] = new Vector3(104.13f, 0.10f, 24.75f),
         };
         readonly Dictionary<string, Transform> shopOverrideAnchors = new Dictionary<string, Transform>();
 
@@ -254,8 +300,10 @@ namespace ScheduleOneNavigator
         readonly Dictionary<NPC, RectTransform> dealerMarkers = new Dictionary<NPC, RectTransform>();
         Sprite dealerSprite;
         Sprite dealerSpriteLocked;
+        Sprite dealerSpriteUnlocked;
         readonly List<NPC> currentDealerNpcs = new List<NPC>();
         readonly List<(RectTransform rect, NPC npc)> dealerRows = new List<(RectTransform, NPC)>();
+        NPC selectedDealer;
         readonly List<RectTransform> dealerHeaderRows = new List<RectTransform>();
         float dealerRefreshTimer;
 
@@ -271,8 +319,61 @@ namespace ScheduleOneNavigator
         Sprite propertySprite;
         readonly List<Property> currentProperties = new List<Property>();
         readonly List<(RectTransform rect, Property property)> propertyRows = new List<(RectTransform, Property)>();
+        Property selectedProperty;
         readonly List<RectTransform> propertyHeaderRows = new List<RectTransform>();
         float propertyRefreshTimer;
+
+        // Manual per-property position correction, keyed by Property.PropertyName -
+        // mirrors ShopPositionOverrides above (same rationale: the best available
+        // position source can be technically real but land somewhere unhelpful).
+        static readonly Dictionary<string, Vector3> PropertyPositionOverrides = new Dictionary<string, Vector3>
+        {
+            // Logged from a click confirmed fullscreen-verified (i.e. NOT subject to
+            // the windowed-mode click-offset bug, see the Hyprland-level root cause
+            // and fix noted in the session log), 2026-09-20 21:26:59 - see FullMapView
+            // click log: world (165.49, 10.00, -77.52), 247.6m from the player at the time.
+            ["Hyland Manor"] = new Vector3(165.49f, 10.00f, -77.52f),
+            // Sewer Office's own position pathed to (53.00, -9.00, 66.00), a
+            // point with no walkable cell within 30m matching its height -
+            // repeatedly confirmed unreachable (60+ retry attempts, see
+            // session log). Replaced with the player's own tracked position
+            // while standing at the Sewer Office, 2026-09-20 22:55:57 - see
+            // FullMapView pathfinding log: world (52.27, 0.85, 52.83).
+            ["Sewer Office"] = new Vector3(52.27f, 0.85f, 52.83f),
+            // Logged from a click on the correct spot, 2026-09-20 22:56:51 - see
+            // FullMapView click log: world (-76.44, -2.40, -44.28), 161.3m from the
+            // player at the time. Pathed cleanly (105->20 cells, 0.9m snap offset),
+            // stable across repeated re-checks.
+            ["Docks Warehouse"] = new Vector3(-76.44f, -2.40f, -44.28f),
+            // Logged from a click on the correct spot, 2026-09-20 22:58:01 - see
+            // FullMapView click log: world (-60.78, -3.90, 131.82), 138.0m from the
+            // player at the time. Pathed cleanly (84->17 cells, 0.7m snap offset),
+            // stable across repeated re-checks.
+            ["Sweatshop"] = new Vector3(-60.78f, -3.90f, 131.82f),
+        };
+        readonly Dictionary<string, Transform> propertyOverrideAnchors = new Dictionary<string, Transform>();
+
+        // Returns the override anchor Transform for `propertyName` if one is
+        // configured in PropertyPositionOverrides (creating its backing GameObject
+        // on first use), otherwise `fallback` unchanged. Deliberately a separate
+        // dictionary/anchor-cache from ApplyShopPositionOverride's
+        // shopOverrideAnchors, not a shared/generalized helper - keeps a Property
+        // and a Shop that happen to share a display name from ever colliding, and
+        // matches this file's existing per-tab-state convention.
+        Transform ApplyPropertyPositionOverride(string propertyName, Transform fallback)
+        {
+            if (!PropertyPositionOverrides.TryGetValue(propertyName, out Vector3 overridePos))
+                return fallback;
+
+            if (!propertyOverrideAnchors.TryGetValue(propertyName, out Transform anchor) || anchor == null)
+            {
+                GameObject go = new GameObject($"PropertyPositionOverride_{propertyName}");
+                anchor = go.transform;
+                propertyOverrideAnchors[propertyName] = anchor;
+            }
+            anchor.position = overridePos;
+            return anchor;
+        }
 
         // Other multiplayer players (green dot) - ambient, shown on every
         // tab regardless of viewMode, mirroring the small minimap's own
@@ -290,6 +391,11 @@ namespace ScheduleOneNavigator
         readonly Text[] tabButtonTexts = new Text[5];
 
         bool visible;
+        // Read by PhoneSetIsOpenCursorPatch (PhoneIntegration.cs) to know
+        // whether a vanilla phone close (e.g. TAB, which closes the whole
+        // phone without ever touching MapApp.SetOpen) needs to also close
+        // this overlay, or whether it's already closed.
+        internal bool Visible => visible;
         float zoom = DefaultZoom;
         bool zoomInitialized;
         float screenSizePx;
@@ -302,13 +408,41 @@ namespace ScheduleOneNavigator
         Vector2 dragStartMouse;
         Vector2 dragStartPan;
 
-        CursorLockMode savedLockState;
-        bool savedCursorVisible;
         HotbarSlot savedEquippedSlot;
         Il2CppScheduleOne.Combat.PunchController punchController;
 
         static Font cachedFont;
         static bool loggedSpriteDiag;
+        bool loggedTabClickDiagOnce;
+
+        // Set immediately before MapApp.Instance?.SetOpen(false) below, read
+        // once by SetVisible(false) - distinguishes "M closes back to
+        // gameplay" from "Escape/right-click backs out to the phone's home
+        // screen" without changing the Harmony postfix's fixed SetOpen(bool)
+        // signature (see PhoneIntegration.cs). internal so PhoneIntegration's
+        // patch can also set it for close paths that don't go through here
+        // (e.g. vanilla right-click).
+        internal static bool closeToPhoneHome;
+
+        // Set around our own MapApp.Instance?.SetOpen(false) calls below, so
+        // PhoneIntegration.cs's Harmony Prefix on MapApp.SetOpen can tell
+        // "this close is already being handled correctly by our own M/Escape
+        // code" apart from a close we don't control at all (chiefly vanilla
+        // right-click) - the Prefix only acts when this is false, avoiding a
+        // double RequestCloseApp() call and not clobbering the
+        // closeToPhoneHome value we deliberately set ourselves.
+        internal static bool closingViaOwnKeyHandling;
+
+        // M-key close tracking (see Tick()) - a plain GetKeyDown(M) while
+        // visible isn't enough to mean "close": it also fires on the very
+        // same press that just opened the map (confirmed live 2026-09-20 -
+        // reacting on that same press closed it right back, and reacting on
+        // its key-up instead just moved the same problem to release time).
+        // Only arm on a press that starts while the map was ALREADY open
+        // (tracked via visibleLastFrame/justBecameVisible below), so the
+        // opening press itself is correctly ignored.
+        bool visibleLastFrame;
+        bool pendingMClose;
 
         // Reachable from PhoneIntegration.cs's static Harmony patch, which has
         // no other way to get at the running instance (opening is now driven
@@ -325,16 +459,80 @@ namespace ScheduleOneNavigator
         {
             CustomizeMapAppIcon();
 
+            // Must run before the `!visible` early-return below, and before
+            // any key checks, so it reflects "was the map already open
+            // BEFORE this frame's input" - see pendingMClose below.
+            bool justBecameVisible = visible && !visibleLastFrame;
+            visibleLastFrame = visible;
+
             if (!visible)
+            {
+                pendingMClose = false;
                 return;
+            }
+
+            // Handle a close armed on a PREVIOUS frame before reading this
+            // frame's own key state - see the arming comment below for why
+            // this is deferred by a frame instead of acted on immediately.
+            if (pendingMClose)
+            {
+                pendingMClose = false;
+                closeToPhoneHome = false;
+                closingViaOwnKeyHandling = true;
+                MapApp.Instance?.SetOpen(false);
+                closingViaOwnKeyHandling = false;
+                return;
+            }
+
+            // M is the game's own vanilla hotkey for opening the map app
+            // (not handled by this mod at all). Only arm on a press that
+            // starts while the map is ALREADY open (justBecameVisible is
+            // true on the very frame the map just opened, whether that
+            // happened via this same M press or otherwise) - otherwise the
+            // opening press itself would immediately close the map again
+            // (confirmed live 2026-09-20: every M tap opened then instantly
+            // closed). The actual close is deferred to next frame (above)
+            // rather than acted on immediately here, to avoid a same-frame
+            // race with the vanilla open-handling on this same key
+            // (confirmed live 2026-09-20: closing synchronously on key-down
+            // did nothing visible, presumably undone by it) - waiting a
+            // single frame (~16ms) is imperceptible but lets that same-frame
+            // vanilla handling fully resolve first, unlike waiting for the
+            // key to be released, which felt sluggish.
+            if (Input.GetKeyDown(KeyCode.M) && !justBecameVisible)
+            {
+                pendingMClose = true;
+                return;
+            }
 
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                // Route through the real app's own close path (see
-                // PhoneIntegration.cs) instead of calling SetVisible directly,
-                // so MapApp's own isOpen/bookkeeping stays consistent with
-                // what's actually on screen.
+                // Ask the phone to close the active app and fall back to its
+                // home screen FIRST, while MapApp still considers itself
+                // open - RequestCloseApp() needs to see a still-valid active
+                // app to correctly swap AppsCanvas/HomeScreen. Only then call
+                // MapApp.SetOpen(false) ourselves, both to keep MapApp's own
+                // isOpen bookkeeping consistent and to fire the existing
+                // Harmony postfix that hides our own overlay. Doing
+                // SetOpen(false) first (previous attempt) apparently cleared
+                // the active-app bookkeeping before RequestCloseApp() ran,
+                // so the home screen was never actually shown - confirmed
+                // live 2026-09-20 (blank/unloaded phone screen after Escape,
+                // and independently after a vanilla right-click app-close -
+                // the latter is separately handled by a Harmony Prefix in
+                // PhoneIntegration.cs, since it never runs through this
+                // Tick() method at all).
+                closeToPhoneHome = true;
+                MelonLogger.Msg($"[Minimap] FullMapView: Escape - before close: " +
+                    $"MapApp.isOpen={MapApp.Instance?.isOpen}, Phone.IsAnyAppOpen={Phone.Instance?.IsAnyAppOpen}, " +
+                    $"HomeScreen.isOpen={HomeScreen.Instance?.isOpen}, AppsCanvas.isOpen={AppsCanvas.Instance?.isOpen}");
+                Phone.Instance?.RequestCloseApp();
+                closingViaOwnKeyHandling = true;
                 MapApp.Instance?.SetOpen(false);
+                closingViaOwnKeyHandling = false;
+                MelonLogger.Msg($"[Minimap] FullMapView: Escape - after close: " +
+                    $"MapApp.isOpen={MapApp.Instance?.isOpen}, Phone.IsAnyAppOpen={Phone.Instance?.IsAnyAppOpen}, " +
+                    $"HomeScreen.isOpen={HomeScreen.Instance?.isOpen}, AppsCanvas.isOpen={AppsCanvas.Instance?.isOpen}");
                 return;
             }
 
@@ -492,6 +690,50 @@ namespace ScheduleOneNavigator
 
                 Vector2 mousePos = Input.mousePosition;
 
+                // Diagnostics (2026-09-20) - user reports the tab bar
+                // stopped responding to clicks after the wrapping layout
+                // change (TabColumns), while map/route clicks still work
+                // fine, meaning Tick() reaches this point every frame and
+                // the miss is isolated to FindClickedTab's hit-test itself.
+                // Static review found no logic bug (identical hit-test
+                // pattern to the still-working row clicks, no stale
+                // references, canvas is our own hardcoded
+                // ScreenSpaceOverlay one) - log real screen-space numbers
+                // instead of guessing further, same pattern used to crack
+                // every previous coordinate-space bug in this file.
+                if (!loggedTabClickDiagOnce)
+                {
+                    loggedTabClickDiagOnce = true;
+                    Canvas tabCanvas = tabButtonRects.Length > 0 && tabButtonRects[0] != null
+                        ? tabButtonRects[0].GetComponentInParent<Canvas>()
+                        : null;
+                    MelonLogger.Msg($"[Minimap] FullMapView: tab click diag - canvas={(tabCanvas != null ? tabCanvas.name : "null")}, " +
+                        $"renderMode={(tabCanvas != null ? tabCanvas.renderMode.ToString() : "n/a")}, " +
+                        $"worldCamera={(tabCanvas != null && tabCanvas.worldCamera != null ? tabCanvas.worldCamera.name : "null")}, " +
+                        $"screen=({Screen.width}x{Screen.height})");
+                }
+                // (2026-09-20, second pass) - the first version of this diag
+                // used GetWorldCorners(Vector3[]), an out-array-param API
+                // that reported (0,0)-(0,0) for every tab, identically,
+                // which is far more consistent with a broken Il2Cpp interop
+                // array write-back than a real layout bug (RectTransform.rect/
+                // .position/.lossyScale below are plain return-value
+                // properties, not out-params, so they should marshal
+                // correctly) - also now logging RectangleContainsScreenPoint's
+                // actual return value per tab, the real function
+                // FindClickedTab relies on, instead of inferring a rect.
+                for (int i = 0; i < tabButtonRects.Length; i++)
+                {
+                    RectTransform tabRect = tabButtonRects[i];
+                    if (tabRect == null)
+                        continue;
+                    bool hit = RectTransformUtility.RectangleContainsScreenPoint(tabRect, mousePos);
+                    MelonLogger.Msg($"[Minimap] FullMapView: tab[{i}] rect={tabRect.rect}, " +
+                        $"anchoredPosition={tabRect.anchoredPosition}, sizeDelta={tabRect.sizeDelta}, " +
+                        $"worldPosition={tabRect.position}, lossyScale={tabRect.lossyScale}, " +
+                        $"activeInHierarchy={tabRect.gameObject.activeInHierarchy}, hit={hit}, mousePos=({mousePos.x:F0},{mousePos.y:F0})");
+                }
+
                 int clickedTab = FindClickedTab(mousePos);
                 if (clickedTab >= 0)
                 {
@@ -534,19 +776,23 @@ namespace ScheduleOneNavigator
                 }
                 else if (viewMode == MapViewMode.Shops)
                 {
-                    Transform clickedShopRow = FindClickedShopRow(mousePos);
-                    if (clickedShopRow != null)
+                    (Transform position, string name) clickedShopRow = FindClickedShopRow(mousePos);
+                    if (clickedShopRow.position != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: shop row clicked -> {clickedShopRow.position}");
-                        routePlanner.SetDestination(clickedShopRow.position);
+                        MelonLogger.Msg($"[Minimap] FullMapView: shop row clicked -> {clickedShopRow.name} {clickedShopRow.position.position}");
+                        routePlanner.SetDestination(clickedShopRow.position.position);
+                        selectedShop = clickedShopRow.position;
+                        RefreshShops();
                     }
                     else if (!dragging && RectTransformUtility.RectangleContainsScreenPoint(viewport, mousePos))
                     {
-                        Transform clickedShop = FindClickedShop(mousePos);
-                        if (clickedShop != null)
+                        (Transform position, string name) clickedShop = FindClickedShop(mousePos);
+                        if (clickedShop.position != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: shop marker clicked -> {clickedShop.position}");
-                            routePlanner.SetDestination(clickedShop.position);
+                            MelonLogger.Msg($"[Minimap] FullMapView: shop marker clicked -> {clickedShop.name} {clickedShop.position.position}");
+                            routePlanner.SetDestination(clickedShop.position.position);
+                            selectedShop = clickedShop.position;
+                            RefreshShops();
                         }
                         else
                         {
@@ -561,6 +807,8 @@ namespace ScheduleOneNavigator
                     {
                         MelonLogger.Msg($"[Minimap] FullMapView: business row clicked -> {clickedBusinessRow.PropertyName}");
                         routePlanner.SetDestination(clickedBusinessRow.transform.position);
+                        selectedBusiness = clickedBusinessRow;
+                        RefreshBusinessList();
                     }
                     else if (!dragging && RectTransformUtility.RectangleContainsScreenPoint(viewport, mousePos))
                     {
@@ -569,6 +817,8 @@ namespace ScheduleOneNavigator
                         {
                             MelonLogger.Msg($"[Minimap] FullMapView: business marker clicked -> {clickedBusiness.PropertyName}");
                             routePlanner.SetDestination(clickedBusiness.transform.position);
+                            selectedBusiness = clickedBusiness;
+                            RefreshBusinessList();
                         }
                         else
                         {
@@ -583,6 +833,8 @@ namespace ScheduleOneNavigator
                     {
                         MelonLogger.Msg($"[Minimap] FullMapView: dealer row clicked -> {clickedDealerRow.FullName}");
                         routePlanner.SetDestination(clickedDealerRow.transform.position);
+                        selectedDealer = clickedDealerRow;
+                        RefreshDealerList();
                     }
                     else if (!dragging && RectTransformUtility.RectangleContainsScreenPoint(viewport, mousePos))
                     {
@@ -591,6 +843,8 @@ namespace ScheduleOneNavigator
                         {
                             MelonLogger.Msg($"[Minimap] FullMapView: dealer marker clicked -> {clickedDealer.FullName}");
                             routePlanner.SetDestination(clickedDealer.transform.position);
+                            selectedDealer = clickedDealer;
+                            RefreshDealerList();
                         }
                         else
                         {
@@ -604,7 +858,9 @@ namespace ScheduleOneNavigator
                     if (clickedPropertyRow != null)
                     {
                         MelonLogger.Msg($"[Minimap] FullMapView: property row clicked -> {clickedPropertyRow.PropertyName}");
-                        routePlanner.SetDestination(clickedPropertyRow.transform.position);
+                        routePlanner.SetDestination(ApplyPropertyPositionOverride(clickedPropertyRow.PropertyName, clickedPropertyRow.transform).position);
+                        selectedProperty = clickedPropertyRow;
+                        RefreshPropertyList();
                     }
                     else if (!dragging && RectTransformUtility.RectangleContainsScreenPoint(viewport, mousePos))
                     {
@@ -612,7 +868,9 @@ namespace ScheduleOneNavigator
                         if (clickedProperty != null)
                         {
                             MelonLogger.Msg($"[Minimap] FullMapView: property marker clicked -> {clickedProperty.PropertyName}");
-                            routePlanner.SetDestination(clickedProperty.transform.position);
+                            routePlanner.SetDestination(ApplyPropertyPositionOverride(clickedProperty.PropertyName, clickedProperty.transform).position);
+                            selectedProperty = clickedProperty;
+                            RefreshPropertyList();
                         }
                         else
                         {
@@ -1054,6 +1312,7 @@ namespace ScheduleOneNavigator
                 rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.sizeDelta = new Vector2(BusinessDotSize, BusinessDotSize);
                 go.AddComponent<Image>().sprite = businessSprite;
+                AddNameLabel(go, business.PropertyName);
                 businessMarkers[business] = rt;
             }
         }
@@ -1096,19 +1355,16 @@ namespace ScheduleOneNavigator
             return best;
         }
 
-        // True for an NPC belonging to the 6-character "Dealer" hierarchy
-        // (own ShopInterface field per class - see RefreshShops), as opposed
-        // to the separate "Supplier" hierarchy below. Split into two checks
-        // (instead of one combined bool) so the Dealers tab can group by
-        // category, not just exclude from Shops.
+        // True for an NPC belonging to the real, hireable Economy.Dealer
+        // hierarchy (Benji/Brad/Jane/Leo/Molly/Wei - confirmed via decompile
+        // as the classes exposing IsRecruited/CanOfferRecruitment). Type
+        // check instead of a hardcoded name list, mirroring IsSupplierNpc -
+        // previously this wrongly matched Stan/Dan/Fiona/Herbert/Oscar/Steve,
+        // which are plain ShopInterface-based shopkeepers, not Dealers (they
+        // now show up on the Shops tab instead, see RefreshShops).
         static bool IsDealerNpc(NPC npc)
         {
-            return npc.TryCast<Stan>() != null
-                || npc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Dan>() != null
-                || npc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Fiona>() != null
-                || npc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Herbert>() != null
-                || npc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Oscar>() != null
-                || npc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Steve>() != null;
+            return npc.TryCast<Dealer>() != null;
         }
 
         // True for an NPC belonging to the Supplier : NPC hierarchy
@@ -1116,6 +1372,46 @@ namespace ScheduleOneNavigator
         static bool IsSupplierNpc(NPC npc)
         {
             return npc.TryCast<Supplier>() != null;
+        }
+
+        enum DealerAvailability { Locked, Unlocked, Recruited }
+
+        // Three-state read of a Dealer/Supplier row's real status, shared by
+        // RefreshDealerMarkers and RefreshDealerList so the two can't drift.
+        // Real Dealers have a genuine three-state lifecycle
+        // (RelationData.Unlocked gates recruitment, Dealer.IsRecruited says
+        // whether the player actually hired them - unlocked-but-not-recruited
+        // and recruited used to render identically). Suppliers have no
+        // IsRecruited equivalent at all (confirmed via decompile) - Unlocked
+        // is already their usable end state, so it maps straight to
+        // Recruited to keep their existing two-state look.
+        static DealerAvailability GetDealerAvailability(NPC npc)
+        {
+            Dealer dealer = npc.TryCast<Dealer>();
+            if (dealer != null)
+            {
+                if (dealer.IsRecruited)
+                    return DealerAvailability.Recruited;
+                return dealer.RelationData != null && dealer.RelationData.Unlocked
+                    ? DealerAvailability.Unlocked
+                    : DealerAvailability.Locked;
+            }
+
+            Supplier supplier = npc.TryCast<Supplier>();
+            if (supplier != null)
+            {
+                if (supplier.RelationData == null || !supplier.RelationData.Unlocked)
+                    return DealerAvailability.Locked;
+                // Recruited here means "meetable right now" (Status ==
+                // Meeting), not "hired" - Suppliers have no hire concept.
+                // Idle/PreppingDeadDrop are known but not currently
+                // meetable in person, reusing the Unlocked (grey) state.
+                return supplier.Status == Supplier.ESupplierStatus.Meeting
+                    ? DealerAvailability.Recruited
+                    : DealerAvailability.Unlocked;
+            }
+
+            return DealerAvailability.Locked;
         }
 
         // True for any NPC belonging to either hierarchy - excluded from the
@@ -1126,6 +1422,16 @@ namespace ScheduleOneNavigator
         static bool IsDealerOrSupplierNpc(NPC npc)
         {
             return IsDealerNpc(npc) || IsSupplierNpc(npc);
+        }
+
+        // "Benzies Dealer" is the generic FullName of unnamed/unimplemented
+        // filler Dealer NPCs (confirmed live 2026-09-20, screenshot showed 5
+        // duplicate greyed-out "Benzies Dealer" rows alongside the real,
+        // named dealers) - not real recruitable dealers, so excluded from
+        // both the list and the map markers.
+        static bool IsPlaceholderDealerName(NPC npc)
+        {
+            return npc.FullName == "Benzies Dealer";
         }
 
         // Dealers tab - same shape as RefreshBusinessMarkers/
@@ -1146,8 +1452,21 @@ namespace ScheduleOneNavigator
             HashSet<NPC> current = new HashSet<NPC>();
             if (npcs != null)
                 foreach (NPC npc in npcs)
-                    if (npc != null && IsDealerOrSupplierNpc(npc) && npc.gameObject.activeInHierarchy)
-                        current.Add(npc);
+                {
+                    if (npc == null || !IsDealerOrSupplierNpc(npc) || !npc.gameObject.activeInHierarchy)
+                        continue;
+                    if (IsPlaceholderDealerName(npc))
+                        continue;
+                    // A Supplier only gets a marker while physically present
+                    // for a meeting the player requested via the phone
+                    // (Status == Meeting) - Idle/PreppingDeadDrop means
+                    // they're not meetable in person right now, even if
+                    // otherwise unlocked/known.
+                    Supplier supplier = npc.TryCast<Supplier>();
+                    if (supplier != null && supplier.Status != Supplier.ESupplierStatus.Meeting)
+                        continue;
+                    current.Add(npc);
+                }
 
             List<NPC> stale = null;
             foreach (var kvp in dealerMarkers)
@@ -1162,7 +1481,7 @@ namespace ScheduleOneNavigator
 
             foreach (NPC npc in current)
             {
-                bool available = npc.RelationData != null && npc.RelationData.Unlocked;
+                DealerAvailability avail = GetDealerAvailability(npc);
 
                 if (!dealerMarkers.TryGetValue(npc, out RectTransform rt))
                 {
@@ -1173,13 +1492,19 @@ namespace ScheduleOneNavigator
                     rt.pivot = new Vector2(0.5f, 0.5f);
                     rt.sizeDelta = new Vector2(DealerDotSize, DealerDotSize);
                     go.AddComponent<Image>();
+                    AddNameLabel(go, npc.FullName);
                     dealerMarkers[npc] = rt;
                 }
 
-                // Sprite reflects RelationData.Unlocked, refreshed every
-                // cycle (not just on creation) - a dealer/supplier can become
-                // available mid-session as the player progresses.
-                rt.GetComponent<Image>().sprite = available ? dealerSprite : dealerSpriteLocked;
+                // Sprite reflects GetDealerAvailability, refreshed every
+                // cycle (not just on creation) - a dealer/supplier can change
+                // state mid-session as the player progresses.
+                rt.GetComponent<Image>().sprite = avail switch
+                {
+                    DealerAvailability.Recruited => dealerSprite,
+                    DealerAvailability.Unlocked => dealerSpriteUnlocked,
+                    _ => dealerSpriteLocked,
+                };
             }
         }
 
@@ -1256,6 +1581,7 @@ namespace ScheduleOneNavigator
                 rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.sizeDelta = new Vector2(PropertyDotSize, PropertyDotSize);
                 go.AddComponent<Image>().sprite = propertySprite;
+                AddNameLabel(go, p.PropertyName);
                 propertyMarkers[p] = rt;
             }
         }
@@ -1271,7 +1597,7 @@ namespace ScheduleOneNavigator
                     rt.gameObject.SetActive(false);
                     continue;
                 }
-                Vector2 mapPos = posUtil.GetMapPosition(p.transform.position);
+                Vector2 mapPos = posUtil.GetMapPosition(ApplyPropertyPositionOverride(p.PropertyName, p.transform).position);
                 rt.gameObject.SetActive(true);
                 rt.anchoredPosition = mapPos * zoom + panOffset;
             }
@@ -1387,10 +1713,9 @@ namespace ScheduleOneNavigator
         //     2026-09-18 fix) - its LoadingBayDetector/DeliveryBays fields
         //     are real, physically-placed scene components though.
         //   - A handful of shops are run by a single bespoke NPC class that
-        //     exposes its own shop-panel reference - mirrors the known
-        //     Dan/Stan/Fiona/Herbert/Oscar/Steve dealer-NPC pattern, but
-        //     these ones (Jeremy = Auto Shop, Ray = Ray's Realty) are
-        //     regular NPCs, not Dealers.
+        //     exposes its own shop-panel reference, same shape as the
+        //     Dan/Stan/Fiona/Herbert/Oscar/Steve shopkeepers below (Jeremy =
+        //     Auto Shop, Ray = Ray's Realty) - these aren't Dealers either.
         //   - Pawn Shop is a singleton (PawnShopInterface.Instance) with a
         //     direct PawnShopNPC field.
         //   - Casino/Barbershop/Top Tattoos: no reliable position source was
@@ -1410,34 +1735,25 @@ namespace ScheduleOneNavigator
 
             var npcs = NPCManager.NPCRegistry;
 
-            // The 6 known dealer NPCs (Stan/Dan/Fiona/Herbert/Oscar/Steve)
-            // each carry their own ShopInterface field, which shows up in
-            // ShopInterface.AllShops right alongside genuine retail shops
-            // (confirmed live 2026-09-19: "Oscar's Store" leaked into the
-            // Shops tab this way). Dealers are their own, separate category
-            // per the user - build the set of their ShopInterface instances
-            // upfront so the generic sweep below can skip them.
+            // Suppliers (Albert/Phil/Salvador/Shirley) each carry their own
+            // Shop property (Supplier : NPC - confirmed via decompile: exactly
+            // these 4 classes extend Supplier in the whole assembly), which
+            // shows up in ShopInterface.AllShops right alongside genuine
+            // retail shops - leaked into the Shops tab as unroutable entries
+            // until found live 2026-09-19 ("Salvador"/"Albert Hoover"/"Fungal
+            // Phil"/"Shirley Watts"). Suppliers are their own, separate
+            // category on the Dealers tab - build the set of their Shop
+            // instances upfront so the generic sweep below can skip them.
+            // (Stan/Dan/Fiona/Herbert/Oscar/Steve are plain shopkeepers, not
+            // Suppliers or Dealers - their ShopInterface is meant to show up
+            // here, e.g. "Oscar's Store".)
             HashSet<ShopInterface> dealerShops = new HashSet<ShopInterface>();
             if (npcs != null)
                 foreach (NPC dealerNpc in npcs)
                 {
                     if (dealerNpc == null)
                         continue;
-                    ShopInterface dealerShop =
-                        dealerNpc.TryCast<Stan>()?.ShopInterface
-                        ?? dealerNpc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Dan>()?.ShopInterface
-                        ?? dealerNpc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Fiona>()?.ShopInterface
-                        ?? dealerNpc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Herbert>()?.ShopInterface
-                        ?? dealerNpc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Oscar>()?.ShopInterface
-                        ?? dealerNpc.TryCast<Il2CppScheduleOne.NPCs.CharacterClasses.Steve>()?.ShopInterface
-                        // Second dealer hierarchy: Supplier : NPC has its own
-                        // Shop property, inherited by Albert/Phil/Salvador/
-                        // Shirley (confirmed via decompile: exactly these 4
-                        // classes extend Supplier in the whole assembly) -
-                        // leaked into the Shops tab as unroutable entries
-                        // until found live 2026-09-19 ("Salvador"/"Albert
-                        // Hoover"/"Fungal Phil"/"Shirley Watts").
-                        ?? dealerNpc.TryCast<Supplier>()?.Shop;
+                    ShopInterface dealerShop = dealerNpc.TryCast<Supplier>()?.Shop;
                     if (dealerShop != null)
                         dealerShops.Add(dealerShop);
                 }
@@ -1600,6 +1916,7 @@ namespace ScheduleOneNavigator
                 rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.sizeDelta = new Vector2(ShopDotSize, ShopDotSize);
                 go.AddComponent<Image>().sprite = shopSprite;
+                AddNameLabel(go, entry.name);
                 shopMarkers[entry.position] = rt;
             }
 
@@ -1621,7 +1938,7 @@ namespace ScheduleOneNavigator
                 rowRT.pivot = new Vector2(0.5f, 1f);
                 rowRT.anchoredPosition = new Vector2(0f, -i * ShopRowHeight);
                 rowRT.sizeDelta = new Vector2(0f, ShopRowHeight - 4f);
-                rowGO.AddComponent<Image>().color = ShopRowColor;
+                rowGO.AddComponent<Image>().color = position == selectedShop ? Highlight(ShopRowColor) : ShopRowColor;
 
                 GameObject nameGO = new GameObject("Name");
                 nameGO.transform.SetParent(rowGO.transform, false);
@@ -1687,7 +2004,12 @@ namespace ScheduleOneNavigator
             }
         }
 
-        Transform FindClickedShop(Vector2 screenPoint)
+        // Returns the shop name alongside the Transform (not just the position) so
+        // callers can log which shop was actually clicked - added 2026-09-20 after a
+        // position-only log line ("(0.00, 0.00, 0.00)") couldn't be attributed to a
+        // specific shop, making it impossible to tell a real override bug apart from
+        // an as-yet-unhandled shop collapsing to the known UI-panel origin point.
+        (Transform position, string name) FindClickedShop(Vector2 screenPoint)
         {
             Transform best = null;
             float bestDist = float.MaxValue;
@@ -1705,15 +2027,20 @@ namespace ScheduleOneNavigator
                     best = kvp.Key;
                 }
             }
-            return best;
+            if (best == null)
+                return (null, null);
+            foreach (var entry in currentShops)
+                if (entry.position == best)
+                    return (best, entry.name);
+            return (best, null);
         }
 
-        Transform FindClickedShopRow(Vector2 screenPoint)
+        (Transform position, string name) FindClickedShopRow(Vector2 screenPoint)
         {
             foreach (var row in shopRows)
                 if (row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
-                    return row.position;
-            return null;
+                    return (row.position, row.name);
+            return (null, null);
         }
 
         // Rebuilds the deal list every DealRefreshInterval - deal counts are
@@ -1931,7 +2258,7 @@ namespace ScheduleOneNavigator
                 rowRT.pivot = new Vector2(0.5f, 1f);
                 rowRT.anchoredPosition = new Vector2(0f, -i * BusinessRowHeight);
                 rowRT.sizeDelta = new Vector2(0f, BusinessRowHeight - 4f);
-                rowGO.AddComponent<Image>().color = BusinessRowColor;
+                rowGO.AddComponent<Image>().color = business == selectedBusiness ? Highlight(BusinessRowColor) : BusinessRowColor;
 
                 GameObject nameGO = new GameObject("Name");
                 nameGO.transform.SetParent(rowGO.transform, false);
@@ -1969,8 +2296,9 @@ namespace ScheduleOneNavigator
         // user request, so the two hierarchies (see IsDealerNpc/
         // IsSupplierNpc) are easy to tell apart at a glance instead of one
         // flat, registry-ordered list. Each row also shows
-        // RelationData.Unlocked (row color + name suffix), since not every
-        // dealer/supplier is reachable yet depending on story progress.
+        // GetDealerAvailability (row color + name suffix), since not every
+        // dealer/supplier is reachable yet depending on story progress, and
+        // a real Dealer can additionally already be recruited/hired.
         void RefreshDealerList()
         {
             currentDealerNpcs.Clear();
@@ -1988,7 +2316,7 @@ namespace ScheduleOneNavigator
                     // "who do you know", independent of whether they're
                     // physically around right now; only the map MARKER
                     // needs a real, currently-active position.
-                    if (npc == null)
+                    if (npc == null || IsPlaceholderDealerName(npc))
                         continue;
                     if (IsDealerNpc(npc))
                         dealerGroup.Add(npc);
@@ -2042,7 +2370,7 @@ namespace ScheduleOneNavigator
 
             void AddRow(NPC npc)
             {
-                bool available = npc.RelationData != null && npc.RelationData.Unlocked;
+                DealerAvailability avail = GetDealerAvailability(npc);
 
                 GameObject rowGO = new GameObject("DealerRow");
                 rowGO.transform.SetParent(dealListContainer, false);
@@ -2052,7 +2380,13 @@ namespace ScheduleOneNavigator
                 rowRT.pivot = new Vector2(0.5f, 1f);
                 rowRT.anchoredPosition = new Vector2(0f, -y);
                 rowRT.sizeDelta = new Vector2(0f, DealerRowHeight - 4f);
-                rowGO.AddComponent<Image>().color = available ? DealerRowAvailableColor : DealerRowUnavailableColor;
+                Color baseColor = avail switch
+                {
+                    DealerAvailability.Recruited => DealerRowAvailableColor,
+                    DealerAvailability.Unlocked => DealerRowUnlockedColor,
+                    _ => DealerRowUnavailableColor,
+                };
+                rowGO.AddComponent<Image>().color = npc == selectedDealer ? Highlight(baseColor) : baseColor;
 
                 GameObject nameGO = new GameObject("Name");
                 nameGO.transform.SetParent(rowGO.transform, false);
@@ -2063,9 +2397,16 @@ namespace ScheduleOneNavigator
                 nameRT.offsetMax = new Vector2(-8f, 0f);
                 Text nameText = nameGO.AddComponent<Text>();
                 nameText.font = GetFont();
-                nameText.text = available ? npc.FullName : $"{npc.FullName} (noch nicht freigeschaltet)";
+                nameText.text = avail switch
+                {
+                    DealerAvailability.Recruited => npc.FullName,
+                    DealerAvailability.Unlocked => IsSupplierNpc(npc)
+                        ? $"{npc.FullName} (out of town)"
+                        : $"{npc.FullName} (nicht angeheuert)",
+                    _ => npc.FullName,
+                };
                 nameText.fontSize = 15;
-                nameText.color = available ? DealRowTextColor : DealRowSubTextColor;
+                nameText.color = avail == DealerAvailability.Recruited ? DealRowTextColor : DealRowSubTextColor;
                 nameText.alignment = TextAnchor.MiddleLeft;
                 nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 nameText.verticalOverflow = VerticalWrapMode.Truncate;
@@ -2173,7 +2514,8 @@ namespace ScheduleOneNavigator
                 rowRT.pivot = new Vector2(0.5f, 1f);
                 rowRT.anchoredPosition = new Vector2(0f, -y);
                 rowRT.sizeDelta = new Vector2(0f, PropertyRowHeight - 4f);
-                rowGO.AddComponent<Image>().color = p.IsOwned ? PropertyRowOwnedColor : PropertyRowUnownedColor;
+                Color baseColor = p.IsOwned ? PropertyRowOwnedColor : PropertyRowUnownedColor;
+                rowGO.AddComponent<Image>().color = p == selectedProperty ? Highlight(baseColor) : baseColor;
 
                 GameObject nameGO = new GameObject("Name");
                 nameGO.transform.SetParent(rowGO.transform, false);
@@ -2236,6 +2578,11 @@ namespace ScheduleOneNavigator
             if (viewMode == mode)
                 return;
             viewMode = mode;
+            // Selection highlight doesn't carry across tabs.
+            selectedShop = null;
+            selectedBusiness = null;
+            selectedDealer = null;
+            selectedProperty = null;
             // Force an immediate refresh of the tab being switched into,
             // instead of waiting out its refresh interval.
             if (mode == MapViewMode.Deals)
@@ -2262,7 +2609,7 @@ namespace ScheduleOneNavigator
                 MapViewMode.Shops => "Shops",
                 MapViewMode.Businesses => "Businesses",
                 MapViewMode.Dealers => "Dealer & Supplier",
-                MapViewMode.Properties => "Eigentum",
+                MapViewMode.Properties => "Properties",
                 _ => "Bald verfügbar",
             };
 
@@ -2372,16 +2719,14 @@ namespace ScheduleOneNavigator
                 panOffset = Vector2.zero;
                 dragging = false;
 
-                // The game normally locks/hides the cursor to drive camera look
-                // from mouse movement - while our map is open we need a normal,
-                // free-moving visible pointer to aim clicks instead, or the
-                // mouse just spins the camera and Input.mousePosition stays
-                // pinned to screen-center (CursorLockMode.Locked) instead of
-                // tracking real aim position.
-                savedLockState = Cursor.lockState;
-                savedCursorVisible = Cursor.visible;
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
+                // Cursor lock/visibility is no longer managed here - it's
+                // handled centrally by PhoneSetIsOpenCursorPatch
+                // (PhoneIntegration.cs), hooked to the real Phone.SetIsOpen
+                // lifecycle instead of our own open/close branches (fixes a
+                // 2026-09-20 bug where backing out to the phone home screen,
+                // then closing the phone itself, left the cursor free
+                // forever - that final close never went through any path
+                // this class controls).
 
                 // A click on our map must not also register as an attack in
                 // the game world underneath (see Tick() - several earlier
@@ -2472,11 +2817,20 @@ namespace ScheduleOneNavigator
                     $"localPlayer={(localPlayer != null)}, punchController found={(punchController != null)}, " +
                     $"PunchingEnabled after SetPunchingEnabled(false)={(punchController != null ? punchController.PunchingEnabled.ToString() : "n/a")}");
             }
+            else if (closeToPhoneHome)
+            {
+                // Escape: only back the map app out to the phone's home
+                // screen - the player is still holding the phone (same as
+                // while any other app is open), so movement/punch/equip
+                // stay exactly as they are, only the app itself closes.
+                // Phone.RequestCloseApp() was already called in Tick(),
+                // BEFORE MapApp.SetOpen(false) cleared the active-app
+                // bookkeeping it needs - nothing left to do here. Cursor is
+                // unaffected by this branch either way - see
+                // PhoneSetIsOpenCursorPatch (PhoneIntegration.cs).
+            }
             else
             {
-                Cursor.lockState = savedLockState;
-                Cursor.visible = savedCursorVisible;
-
                 if (punchController != null)
                 {
                     punchController.SetPunchingEnabled(true);
@@ -2577,7 +2931,7 @@ namespace ScheduleOneNavigator
             footerRT.sizeDelta = new Vector2(-BezelPadding * 2f, FooterHeight);
             Text hint = footerGO.AddComponent<Text>();
             hint.font = GetFont();
-            hint.text = "Linksklick: Ziel setzen    |    Rechtsklick ziehen: Karte verschieben    |    ESC / #: Schließen";
+            hint.text = "Linksklick: Ziel setzen    |    ESC / M: Schließen";
             hint.fontSize = 15;
             hint.color = HintColor;
             hint.alignment = TextAnchor.MiddleCenter;
@@ -2623,6 +2977,7 @@ namespace ScheduleOneNavigator
             businessSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)BusinessDotSize * 2, BusinessDotColor);
             dealerSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)DealerDotSize * 2, DealerDotColor);
             dealerSpriteLocked = ScheduleOneNavigatorMod.CreateCircleSprite((int)DealerDotSize * 2, DealerDotColorLocked);
+            dealerSpriteUnlocked = ScheduleOneNavigatorMod.CreateCircleSprite((int)DealerDotSize * 2, DealerDotColorUnlocked);
             propertySprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)PropertyDotSize * 2, PropertyDotColor);
             otherPlayerSprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)OtherPlayerDotSize * 2, OtherPlayerDotColor);
 
@@ -2657,9 +3012,16 @@ namespace ScheduleOneNavigator
             dealPanelRT.anchoredPosition = new Vector2(-deviceWidth / 2f + BezelPadding + DealPanelWidth / 2f, bodyY);
             dealPanelGO.AddComponent<Image>().color = DealPanelColor;
 
-            // Tab row: 4 equal-width buttons above the title, switching which
-            // list (Deals/Shops/reserved) the panel below shows - see
-            // FindClickedTab/SetViewMode.
+            // Tab row: up to TabColumns equal-width buttons per row above the
+            // title, wrapping onto additional rows past that, switching
+            // which list the panel below shows - see FindClickedTab/
+            // SetViewMode. Wrapping (added for the "Properties" tab, which
+            // didn't fit in a single 5-way row without truncating - live
+            // 2026-09-20) keeps every tab the same, wider size instead of
+            // shrinking further as more tabs are added.
+            int tabRowCount = (tabButtonRects.Length + TabColumns - 1) / TabColumns;
+            float tabRowsHeight = TabRowHeight * tabRowCount;
+
             GameObject tabRowGO = new GameObject("TabRow");
             tabRowGO.transform.SetParent(dealPanelGO.transform, false);
             RectTransform tabRowRT = tabRowGO.AddComponent<RectTransform>();
@@ -2667,20 +3029,23 @@ namespace ScheduleOneNavigator
             tabRowRT.anchorMax = new Vector2(1f, 1f);
             tabRowRT.pivot = new Vector2(0.5f, 1f);
             tabRowRT.anchoredPosition = Vector2.zero;
-            tabRowRT.sizeDelta = new Vector2(0f, TabRowHeight);
+            tabRowRT.sizeDelta = new Vector2(0f, tabRowsHeight);
 
-            string[] tabLabels = { "Deals", "Shops", "Businesses", "Dealers", "Eigentum" };
-            float tabWidth = DealPanelWidth / tabButtonRects.Length;
+            string[] tabLabels = { "Deals", "Shops", "Biz", "Dealers", "Properties" };
+            float tabWidth = DealPanelWidth / TabColumns;
             for (int i = 0; i < tabButtonRects.Length; i++)
             {
+                int col = i % TabColumns;
+                int row = i / TabColumns;
+
                 GameObject tabGO = new GameObject($"Tab{i}");
                 tabGO.transform.SetParent(tabRowGO.transform, false);
                 RectTransform tabRT = tabGO.AddComponent<RectTransform>();
-                tabRT.anchorMin = new Vector2(0f, 0f);
+                tabRT.anchorMin = new Vector2(0f, 1f);
                 tabRT.anchorMax = new Vector2(0f, 1f);
-                tabRT.pivot = new Vector2(0f, 0.5f);
-                tabRT.anchoredPosition = new Vector2(i * tabWidth, 0f);
-                tabRT.sizeDelta = new Vector2(tabWidth - 2f, 0f);
+                tabRT.pivot = new Vector2(0f, 1f);
+                tabRT.anchoredPosition = new Vector2(col * tabWidth, -row * TabRowHeight);
+                tabRT.sizeDelta = new Vector2(tabWidth - 2f, TabRowHeight - 2f);
                 Image tabImage = tabGO.AddComponent<Image>();
                 tabButtonRects[i] = tabRT;
                 tabButtonImages[i] = tabImage;
@@ -2707,7 +3072,7 @@ namespace ScheduleOneNavigator
             dealTitleRT.anchorMin = new Vector2(0f, 1f);
             dealTitleRT.anchorMax = new Vector2(1f, 1f);
             dealTitleRT.pivot = new Vector2(0.5f, 1f);
-            dealTitleRT.anchoredPosition = new Vector2(0f, -TabRowHeight);
+            dealTitleRT.anchoredPosition = new Vector2(0f, -tabRowsHeight);
             dealTitleRT.sizeDelta = new Vector2(-16f, DealListTitleHeight);
             dealTitleText = dealTitleGO.AddComponent<Text>();
             dealTitleText.font = GetFont();
@@ -2723,7 +3088,7 @@ namespace ScheduleOneNavigator
             dealListViewportRT.anchorMin = new Vector2(0f, 0f);
             dealListViewportRT.anchorMax = new Vector2(1f, 1f);
             dealListViewportRT.offsetMin = new Vector2(0f, DealButtonHeight + 6f);
-            dealListViewportRT.offsetMax = new Vector2(0f, -(TabRowHeight + DealListTitleHeight));
+            dealListViewportRT.offsetMax = new Vector2(0f, -(tabRowsHeight + DealListTitleHeight));
             dealListViewportGO.AddComponent<RectMask2D>();
 
             GameObject dealListGO = new GameObject("Rows");
@@ -2778,5 +3143,33 @@ namespace ScheduleOneNavigator
                 cachedFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
             return cachedFont;
         }
+
+        // Map-marker name label, same look as the other-players label
+        // (RefreshOtherPlayerMarkers) - shared so Shops/Businesses/
+        // Dealers/Properties don't each repeat this setup.
+        static void AddNameLabel(GameObject markerGO, string name)
+        {
+            GameObject labelGO = new GameObject("Name");
+            labelGO.transform.SetParent(markerGO.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = labelRT.anchorMax = new Vector2(0.5f, 0f);
+            labelRT.pivot = new Vector2(0.5f, 1f);
+            labelRT.sizeDelta = new Vector2(120f, 14f);
+            labelRT.anchoredPosition = new Vector2(0f, -2f);
+            Text label = labelGO.AddComponent<Text>();
+            label.font = GetFont();
+            label.text = name;
+            label.fontSize = 11;
+            label.color = Color.white;
+            label.alignment = TextAnchor.UpperCenter;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
+        // Selected-row highlight (Feature 3) - brightens whatever background
+        // color a row would otherwise get, so status coloring (e.g. Dealer
+        // locked/unlocked/recruited, Property owned/unowned) stays readable
+        // while still standing out as selected.
+        static Color Highlight(Color c) => Color.Lerp(c, Color.white, 0.35f);
     }
 }

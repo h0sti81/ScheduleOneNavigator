@@ -44,7 +44,11 @@ Delete `ScheduleOneNavigator.dll` from the `Mods` folder.
 
 ## Compatibility
 
-Doesn't modify save data or other mods' files. One exception: it repurposes the phone's native Map app (icon relabeled to "N") to open this mod's full map instead - the original small in-phone map screen is no longer accessible while this mod is installed. Everything else is a pure overlay/UI addition and shouldn't conflict with anything else. Works identically on Windows and on Linux/Steam Deck via Proton.
+Doesn't modify save data or other mods' files. One exception: it repurposes the phone's native Map app (icon relabeled to "N") to open this mod's full map instead - the original small in-phone map screen is no longer accessible while this mod is installed. Everything else is a pure overlay/UI addition and shouldn't conflict with anything else. Works on both Windows and Linux/Steam Deck via Proton, with one known Proton-specific quirk below.
+
+## Known Issues
+
+- **Windowed mode + Linux/Proton: map clicks can land offset from where you actually clicked.** This is a Wine/Proton pointer-position desync (the OS/compositor↔Wine coordinate transform doesn't get recomputed until the window goes through a real fullscreen transition), not a bug in this mod's own click math - confirmed independent of click accuracy testing. **Workaround:** toggle fullscreen once (into fullscreen and back to windowed) after the game window appears, before opening the map - the fix is then stable for the rest of the session, even switching between windowed and fullscreen afterward. Not observed on native Windows or when launching directly in fullscreen/borderless.
 
 ## Changelog
 
