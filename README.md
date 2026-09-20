@@ -48,7 +48,7 @@ Doesn't modify save data or other mods' files. One exception: it repurposes the 
 
 ## Known Issues
 
-- **Windowed mode + Linux/Proton: map clicks can land offset from where you actually clicked.** This is a Wine/Proton pointer-position desync (the OS/compositor↔Wine coordinate transform doesn't get recomputed until the window goes through a real fullscreen transition), not a bug in this mod's own click math - confirmed independent of click accuracy testing. **Workaround:** toggle fullscreen once (into fullscreen and back to windowed) after the game window appears, before opening the map - the fix is then stable for the rest of the session, even switching between windowed and fullscreen afterward. Not observed on native Windows or when launching directly in fullscreen/borderless.
+- **Windowed mode + Linux/Proton: map clicks can land offset from where you actually clicked.** Happens when the game is set to windowed and you switch to fullscreen (e.g. via a window-manager shortcut like Super+F) while it's still loading - a Wine/Proton pointer-position desync (the OS/compositor↔Wine coordinate transform doesn't get recomputed until the window goes through a real fullscreen transition), not a bug in this mod's own click math. **Workaround:** toggle fullscreen once (into fullscreen and back to windowed) after the game has finished loading, before opening the map - the fix is then stable for the rest of the session, even switching between windowed and fullscreen afterward. Not observed on native Windows or when launching directly in fullscreen/borderless.
 
 ## Changelog
 

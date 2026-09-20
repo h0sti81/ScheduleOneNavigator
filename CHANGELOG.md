@@ -24,9 +24,9 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden markiert, die noch ein Standing/eine Anforderung brauchen. Im Tablet
   zusätzlich anklickbar (Auto-Routing dorthin).
 - **Tablet ist jetzt eine echte Handy-App**: öffnet über das normale Handy
-  (neues "N"-Icon in der App-Übersicht) statt über einen eigenen Hotkey -
-  behebt nebenbei einen seit langem bestehenden Bug, bei dem ein Klick bei
-  offenem Tablet versehentlich nahe NPCs angegriffen hat.
+  statt über einen eigenen Hotkey - behebt nebenbei einen seit langem
+  bestehenden Bug, bei dem ein Klick bei offenem Tablet versehentlich nahe
+  NPCs angegriffen hat.
 - **Cursor-Bug behoben**: der Mauszeiger blieb nach dem Schließen des Handys
   manchmal frei/aktiv, statt wieder gesperrt zu werden - das ließ auch das
   linke Tab-Menü (Deals/Shops/Biz/Dealers/Eigentum) gelegentlich nicht mehr
