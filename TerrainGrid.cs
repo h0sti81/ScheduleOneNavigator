@@ -579,9 +579,39 @@ namespace ScheduleOneNavigator
         // lands on a blocked/off-grid/wrong-floor cell (e.g. clicked a
         // point slightly inside a wall's footprint, or stands on a
         // different storey than our single-height-per-column bake sees).
+        //
+        // Two passes: the first skips cells sitting on a tiny connected
+        // island (<= SmallComponentLogThreshold cells) - a ledge, step or
+        // platform the edge sweeps cut off from everything around it. The
+        // plain nearest-cell snap used to win on exactly such an island at
+        // Oscar's Store (2-cell ledge 4m from the requested point, ~2m above
+        // the dock level the shop actually sits on), so no route could ever
+        // reach it. Only if nothing but islands is in range does the second
+        // pass fall back to the old nearest-cell behaviour.
         static bool TryFindNearestWalkable(int col, int row, float expectedY, int maxRadius, out int outCol, out int outRow)
         {
-            if (col >= 0 && col < cols && row >= 0 && row < rows && MatchesHeight(row * cols + col, expectedY))
+            var islandCache = new Dictionary<int, bool>();
+            bool OnLargeComponent(int idx)
+            {
+                if (!islandCache.TryGetValue(idx, out bool large))
+                {
+                    var component = CollectComponentCapped(idx, SmallComponentLogThreshold + 1);
+                    large = component.Count > SmallComponentLogThreshold;
+                    foreach (int member in component)
+                        islandCache[member] = large;
+                }
+                return large;
+            }
+
+            if (TryFindNearestWalkable(col, row, expectedY, maxRadius, OnLargeComponent, out outCol, out outRow))
+                return true;
+            return TryFindNearestWalkable(col, row, expectedY, maxRadius, null, out outCol, out outRow);
+        }
+
+        static bool TryFindNearestWalkable(int col, int row, float expectedY, int maxRadius, Func<int, bool> accept, out int outCol, out int outRow)
+        {
+            if (col >= 0 && col < cols && row >= 0 && row < rows && MatchesHeight(row * cols + col, expectedY)
+                && (accept == null || accept(row * cols + col)))
             {
                 outCol = col;
                 outRow = row;
@@ -600,7 +630,7 @@ namespace ScheduleOneNavigator
                         int rr = row + dr;
                         if (c < 0 || c >= cols || rr < 0 || rr >= rows)
                             continue;
-                        if (MatchesHeight(rr * cols + c, expectedY))
+                        if (MatchesHeight(rr * cols + c, expectedY) && (accept == null || accept(rr * cols + c)))
                         {
                             outCol = c;
                             outRow = rr;
@@ -613,6 +643,50 @@ namespace ScheduleOneNavigator
             outCol = -1;
             outRow = -1;
             return false;
+        }
+
+        // Flood fill from `idx` with the same step rules as TryAStar, stopping
+        // once `cap` cells are found - enough to tell an island from the
+        // town without walking the whole grid.
+        static List<int> CollectComponentCapped(int idx, int cap)
+        {
+            var seen = new HashSet<int> { idx };
+            var queue = new Queue<int>();
+            queue.Enqueue(idx);
+            var result = new List<int>();
+            while (queue.Count > 0 && result.Count < cap)
+            {
+                int current = queue.Dequeue();
+                result.Add(current);
+                int curCol = current % cols, curRow = current / cols;
+                for (int dr = -1; dr <= 1; dr++)
+                {
+                    for (int dc = -1; dc <= 1; dc++)
+                    {
+                        if (dc == 0 && dr == 0)
+                            continue;
+                        int nc = curCol + dc, nr = curRow + dr;
+                        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows)
+                            continue;
+                        int nIdx = nr * cols + nc;
+                        if (!walkable[nIdx] || seen.Contains(nIdx))
+                            continue;
+                        if (dc != 0 && dr != 0)
+                        {
+                            if (!walkable[curRow * cols + nc] || !walkable[nr * cols + curCol]
+                                || IsOrthogonalEdgeBlocked(curCol, curRow, dc, 0)
+                                || IsOrthogonalEdgeBlocked(curCol, curRow, 0, dr)
+                                || IsDiagonalEdgeBlocked(curCol, curRow, dc, dr))
+                                continue;
+                        }
+                        else if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, dr))
+                            continue;
+                        seen.Add(nIdx);
+                        queue.Enqueue(nIdx);
+                    }
+                }
+            }
+            return result;
         }
 
         const int SnapSearchRadiusCells = 15; // 15*CellSize = ~30m
@@ -628,6 +702,18 @@ namespace ScheduleOneNavigator
         // sizes, and the existing Ramer-Douglas-Peucker simplification in
         // RoutePlanner smooths over the minor path-optimality tradeoff.
         const float RoadCostFactor = 0.6f;
+
+        // In a vehicle the trade-off flips: roads aren't just nicer, they're
+        // where a car can actually go. Off-road cells cost this much per
+        // step (roads 1.0), so a route takes the shortest way onto the road
+        // network, follows it, and only leaves it close to the destination
+        // instead of cutting across lawns and between buildings. Kept
+        // finite so gaps in the road-proximity flags (sparse Road Nodes,
+        // car parks, drive-ways) don't make a destination unreachable.
+        const float VehicleOffRoadCostFactor = 6f;
+
+        // Set per FindPath call from the caller's player state.
+        static bool vehicleMode;
 
         // Extracted from FindPath so the retry ladder below can run the
         // same search again against a wider bake without duplicating it.
@@ -728,7 +814,12 @@ namespace ScheduleOneNavigator
                         // enough to make a route noticeably prefer hugging a
                         // road over a similarly-short diagonal shortcut
                         // across a lawn, which is all this is meant to do.
-                        if (isRoad[nIdx])
+                        if (vehicleMode)
+                        {
+                            if (!isRoad[nIdx])
+                                stepCost *= VehicleOffRoadCostFactor;
+                        }
+                        else if (isRoad[nIdx])
                             stepCost *= RoadCostFactor;
                         float tentativeG = gScore[current] + stepCost;
                         if (!gScore.TryGetValue(nIdx, out float existingG) || tentativeG < existingG)
@@ -792,9 +883,10 @@ namespace ScheduleOneNavigator
             unreachableCacheExpiryTime = Time.time + UnreachableCacheExpirySeconds;
         }
 
-        public static List<Vector3> FindPath(Vector3 start, Vector3 end, out string failReason)
+        public static List<Vector3> FindPath(Vector3 start, Vector3 end, bool inVehicle, out string failReason)
         {
             failReason = null;
+            vehicleMode = inVehicle;
 
             if (TryUseUnreachableCache(start, end, out List<Vector3> cachedFallback))
                 return cachedFallback;
@@ -1236,6 +1328,19 @@ namespace ScheduleOneNavigator
             // nearest-first order - nearestIdx -> ... -> endIdx - with no
             // reversal needed (unlike ReconstructPath below, which walks
             // from the far end of a search rooted at the start).
+            //
+            // The BFS parent chain is merely the fewest-cells route and
+            // ignores step costs (road preference, vehicle mode) - in a car
+            // that drew a straight line across lawns and piers whenever the
+            // car's own colliders cut the start off. nearestIdx is in end's
+            // component, so a weighted A* from it always succeeds; the BFS
+            // chain stays as a fallback only.
+            if (nearestIdx != endIdx)
+            {
+                var weighted = TryAStar(nearestIdx, endIdx, endIdx % cols, endIdx / cols, out _);
+                if (weighted != null)
+                    return weighted;
+            }
             var cells = new List<int> { nearestIdx };
             int cur = nearestIdx;
             while (cameFrom.TryGetValue(cur, out int prev))

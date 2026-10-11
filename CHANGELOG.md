@@ -5,6 +5,25 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.7] - 2026-10-11
+
+- **Fahrzeugmodus für die Route**: sitzt man in einem Fahrzeug, bevorzugt die
+  Route Straßen jetzt stark - kürzester Weg auf die Straße, dann auf der
+  Straße bis nahe ans Ziel, statt quer über Wiesen, Piers und zwischen
+  Gebäuden hindurch. Zu Fuß bleibt es bei der bisherigen leichten
+  Straßenbevorzugung. Der Wechsel wird automatisch erkannt.
+- **Ausweich-Route beachtet jetzt Straßen**: stand der Spieler (oder sein
+  Fahrzeug) in einem abgeschnittenen Bereich, wurde die Route vom nächsten
+  erreichbaren Punkt aus nur als "wenigste Zellen"-Weg gezogen und ignorierte
+  Straßen komplett. Läuft jetzt über dieselbe gewichtete Suche wie die normale
+  Route.
+- **Oscar's Store wieder erreichbar**: der Zielpunkt rastete auf einem kleinen,
+  abgeschnittenen Absatz neben dem Laden ein, sodass nie eine Route gefunden
+  wurde. Das Einrasten überspringt jetzt solche Mini-Inseln.
+- **Lila Punkte auf der Minimap entfernt**: die Minimap-Kamera zeichnete auch
+  Layer, die das Spiel selbst ausblendet (Hilfsobjekte an Bäumen erschienen als
+  lila Punkte). Sie übernimmt jetzt die Layer-Maske der Spielerkamera.
+
 ## [v0.6] - 2026-09-21
 
 - **Dealer-Anzeige überarbeitet**: Der "Dealers"-Tab zeigte bisher die falschen
@@ -76,7 +95,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden-Aura), Tablet-Overlay mit Tabs Deals/Shops/Businesses/Dealers/
   Eigentum, Auto-Routing über eigenes TerrainGrid-Pathfinding.
 
-[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.6...HEAD
+[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...HEAD
+[v0.7]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.6...v0.7
 [v0.6]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.5...v0.6
 [v0.5]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.4...v0.5
 [v0.4]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.3...v0.4

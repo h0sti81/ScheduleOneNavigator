@@ -29,6 +29,7 @@ namespace ScheduleOneNavigator
         bool hasDestination;
         float recalcTimer;
         int consecutiveFailures;
+        bool lastInVehicle;
 
         readonly List<Vector3> waypoints = new List<Vector3>();
         readonly Queue<Vector3> queuedStops = new Queue<Vector3>();
@@ -119,7 +120,15 @@ namespace ScheduleOneNavigator
 
         void RequestPath(Vector3 start, Vector3 end)
         {
-            var raw = TerrainGrid.FindPath(start, end, out string failReason);
+            Player player = Player.Local;
+            bool inVehicle = player != null && player.IsInVehicle;
+            if (inVehicle != lastInVehicle)
+            {
+                lastInVehicle = inVehicle;
+                MelonLogger.Msg($"[Minimap] Route mode: {(inVehicle ? "vehicle (roads strongly preferred)" : "on foot")}.");
+            }
+
+            var raw = TerrainGrid.FindPath(start, end, inVehicle, out string failReason);
             if (raw == null || raw.Count == 0)
             {
                 consecutiveFailures++;

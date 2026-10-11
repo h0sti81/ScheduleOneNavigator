@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.6.0", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.7.0", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator
@@ -169,7 +169,12 @@ namespace ScheduleOneNavigator
             minimapCamera.farClipPlane = CameraHeight + 40f;
             minimapCamera.clearFlags = CameraClearFlags.SolidColor;
             minimapCamera.backgroundColor = BackgroundColor;
-            minimapCamera.cullingMask = ~0;
+            // Render only what the player's own camera renders. ~0 also drew
+            // layers the game hides from the player (helper objects at tree
+            // trunks showed up as magenta dots on the minimap).
+            Camera mainCam = Camera.main;
+            minimapCamera.cullingMask = mainCam != null ? mainCam.cullingMask : ~0;
+            LogHiddenLayers(mainCam);
             minimapCamera.depth = -10f;
             minimapCamera.aspect = 1f;
 
@@ -252,6 +257,25 @@ namespace ScheduleOneNavigator
             if (player.IsInVehicle && player.CurrentVehicleSeat != null)
                 return player.CurrentVehicleSeat.transform.eulerAngles.y;
             return player.transform.eulerAngles.y;
+        }
+
+        static void LogHiddenLayers(Camera mainCam)
+        {
+            if (mainCam == null)
+            {
+                MelonLogger.Warning("[Minimap] Camera.main not found - minimap renders all layers.");
+                return;
+            }
+            var hidden = new List<string>();
+            for (int layer = 0; layer < 32; layer++)
+            {
+                if ((mainCam.cullingMask & (1 << layer)) != 0)
+                    continue;
+                string name = LayerMask.LayerToName(layer);
+                if (!string.IsNullOrEmpty(name))
+                    hidden.Add($"{layer}:{name}");
+            }
+            MelonLogger.Msg($"[Minimap] Using {mainCam.name}'s culling mask; hidden layers: {(hidden.Count > 0 ? string.Join(", ", hidden) : "none")}.");
         }
 
         void UpdateCamera(Player player)

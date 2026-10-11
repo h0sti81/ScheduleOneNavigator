@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <GameDir>/home/h0sti/.local/share/Steam/steamapps/common/Schedule I</GameDir>
+    <GameDir>/mnt/daten/Steam/steamapps/common/Schedule I</GameDir>
     <MLNet6Dir>$(GameDir)/MelonLoader/net6</MLNet6Dir>
     <Il2CppAsmDir>$(GameDir)/MelonLoader/Il2CppAssemblies</Il2CppAsmDir>
   </PropertyGroup>
