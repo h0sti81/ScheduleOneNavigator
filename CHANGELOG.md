@@ -18,6 +18,22 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Übergänge in beide Richtungen gelten, führten Routen über flache Dächer
   quer durch Gebäude. Jetzt darf jeder Teilschritt nur so viel steigen/fallen,
   wie die Spielfigur wirklich schafft (Stufenhöhe bzw. Steigung).
+- **Routen meiden Gebäude**: Zellen in Gebäuden (erkannt über ein Dach darüber
+  oder die Gebäudefarbe der Spielkarte) kosten 10x so viel - Routen bleiben
+  auf Straßen und Gehwegen und gehen nur noch hinein, wenn das Ziel drinnen
+  liegt oder es keinen anderen Weg gibt. Vorher führten Routen z. B. quer
+  durch das Lagerhaus an den Docks.
+- **Diagonalschritte symmetrisch geprüft**: ein Schritt von A nach B wurde
+  anders bewertet als von B nach A. Dadurch fiel die Ausweich-Route (Spieler in
+  einem abgeschlossenen Raum) still auf den kürzesten Zellen-Weg zurück und
+  ignorierte Straßen- und Gebäudekosten.
+- **Abgeschnittene Suchbereiche erkannt**: klebt eine Route am Rand des
+  abgetasteten Bereichs oder beginnt die Ausweich-Route weit vom Spieler
+  entfernt, wird einmal ein größerer Bereich abgetastet (vorher z. B. Route
+  zum Bungalow ab einem Steg statt ab den Docks).
+- **Debug-Dump**: mit `VerboseLogging = true` wird für jedes neue Ziel das
+  Wegfindungs-Raster nach `UserData/NavigatorDebug/` geschrieben (für
+  Fehlerberichte).
 
 ## [v0.7.1] - 2026-10-11
 

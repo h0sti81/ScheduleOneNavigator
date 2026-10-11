@@ -30,6 +30,7 @@ namespace ScheduleOneNavigator
         float recalcTimer;
         int consecutiveFailures;
         bool lastInVehicle;
+        bool debugDumpPending; // first path for each new destination, verbose only
         double lastPathMs;
 
         readonly List<Vector3> waypoints = new List<Vector3>();
@@ -103,6 +104,7 @@ namespace ScheduleOneNavigator
         {
             destination = world;
             hasDestination = true;
+            debugDumpPending = true;
             recalcTimer = 0f; // trigger an immediate path request on the next Tick
             // Clear stale waypoints from whatever the previous destination was
             // right away, rather than leaving them drawn until the new path
@@ -132,6 +134,11 @@ namespace ScheduleOneNavigator
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var raw = TerrainGrid.FindPath(start, end, inVehicle, out string failReason);
             lastPathMs = sw.Elapsed.TotalMilliseconds;
+            if (debugDumpPending && Log.Verbose)
+            {
+                debugDumpPending = false;
+                TerrainGrid.DumpDebugGrid(start, end, raw, inVehicle);
+            }
             if (raw == null || raw.Count == 0)
             {
                 consecutiveFailures++;

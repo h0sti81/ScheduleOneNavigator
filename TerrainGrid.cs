@@ -97,6 +97,29 @@ namespace ScheduleOneNavigator
         // over a similarly-short cut across open ground, without depending
         // on that graph actually connecting start to end.
         static bool[] isRoad;
+        // True if something solid is overhead (a ray straight up from the
+        // cell's feet hits a collider) - i.e. inside a building or under a
+        // roof. Some buildings (the docks warehouse with Oscar's and the
+        // arms dealer) have doorways the bake sees as open on both sides,
+        // which made them a shortcut; indoor steps cost IndoorCostFactor
+        // more so routes stay on streets and sidewalks and only go inside
+        // when the destination is in there or there's no outdoor way.
+        static bool[] isIndoor;
+        static int indoorCellCount;
+        static int mapBuildingCellCount;
+
+        // Building footprints on the map art are neutral grey ~(60,60,60);
+        // roads are a lighter ~(73,73,73), plazas/sidewalks 110+, grass and
+        // water are tinted. Range checked against map screenshots and the
+        // older "color calibration" log lines around Oscar's.
+        static bool IsMapBuildingColor(Color32 c)
+        {
+            int max = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            int min = Mathf.Min(c.r, Mathf.Min(c.g, c.b));
+            return max - min <= 6 && max >= 50 && max <= 66;
+        }
+        const float IndoorCostFactor = 10f; // "only if there's really no other way" (user request after x3 still cut through)
+        const float IndoorCheckHeight = 25f;
         static int roadCellCount;
         const float RoadProximityMeters = 3f;
         // Edge-blocked flags, checked at bake time (see TryBake pass 2) so
@@ -148,11 +171,55 @@ namespace ScheduleOneNavigator
         // radius, not a small fixed margin.
         static float bakedFeetClearance;
 
-        static bool CoveredByCurrentBake(Vector3 a, Vector3 b)
+        // Margin the resident bake was made with (see ShouldWidenFor).
+        static float currentBakeMargin;
+
+        // A route that runs within EdgeHugCells of the bake box's edge was
+        // probably bent by the box rather than by the town - the better way
+        // round lies outside it (seen live: the outdoor detour east of the
+        // docks warehouse was just past start.x + 60m, so the only route
+        // inside the box went through the building). Worth one wider bake,
+        // but only if the next rung is actually wider than what's resident,
+        // so a reused wide bake can't trigger a rebake every re-plan.
+        const int EdgeHugCells = 2;
+
+        static bool ShouldWidenFor(List<Vector3> path, int attempt)
+        {
+            if (path == null || attempt + 1 >= BakeMarginAttemptsMeters.Length)
+                return false;
+            if (BakeMarginAttemptsMeters[attempt + 1] <= currentBakeMargin)
+                return false;
+            float edge = EdgeHugCells * CellSize;
+            foreach (Vector3 p in path)
+                if (p.x < minX + edge || p.x > maxX - edge || p.z < minZ + edge || p.z > maxZ - edge)
+                    return true;
+            return false;
+        }
+
+        // The fallback route starts at the destination region's cell nearest
+        // the player. If that's far away AND the region runs into the bake
+        // edge, the region was probably cut off by the box (seen live: the
+        // docks were joined to the west island only east of the box, so the
+        // "nearest" point was a jetty 62m away across the water). Standing
+        // in a closed room gives a nearby nearest point and no rebake.
+        const float FallbackClippedDistance = 20f;
+
+        static bool FallbackLooksClipped(List<Vector3> fallback, Vector3 start, HashSet<int> endComponent, int attempt)
+        {
+            if (fallback == null || fallback.Count == 0 || endComponent == null)
+                return false;
+            if (attempt + 1 >= BakeMarginAttemptsMeters.Length || BakeMarginAttemptsMeters[attempt + 1] <= currentBakeMargin)
+                return false;
+            Vector3 first = fallback[0];
+            float dx = first.x - start.x, dz = first.z - start.z;
+            return dx * dx + dz * dz > FallbackClippedDistance * FallbackClippedDistance && ComponentTouchesBoundary(endComponent);
+        }
+
+        static bool CoveredByCurrentBake(Vector3 a, Vector3 b, float inset = 0f)
         {
             return baked &&
-                a.x >= minX && a.x <= maxX && a.z >= minZ && a.z <= maxZ &&
-                b.x >= minX && b.x <= maxX && b.z >= minZ && b.z <= maxZ;
+                a.x >= minX + inset && a.x <= maxX - inset && a.z >= minZ + inset && a.z <= maxZ - inset &&
+                b.x >= minX + inset && b.x <= maxX - inset && b.z >= minZ + inset && b.z <= maxZ - inset;
         }
 
         // Cheap (no allocation) estimate of how many cells a bake at this
@@ -175,7 +242,12 @@ namespace ScheduleOneNavigator
         // the old, smaller one already "covered" both points.
         static bool EnsureBakedAtMargin(Vector3 a, Vector3 b, float margin, bool allowReuseExisting)
         {
-            if (allowReuseExisting && CoveredByCurrentBake(a, b))
+            // Reuse only if the old bake also covers a decent margin around
+            // both points: a box from an earlier, unrelated route can contain
+            // start and end yet clip the connection between them (seen live:
+            // the pier linking the docks to the west island was cut off, so
+            // the fallback started the route at a random jetty instead).
+            if (allowReuseExisting && CoveredByCurrentBake(a, b, margin * 0.5f))
                 return true;
 
             float lowX = Mathf.Min(a.x, b.x) - margin;
@@ -191,12 +263,13 @@ namespace ScheduleOneNavigator
             }
 
             baked = true;
+            currentBakeMargin = margin;
             walkableCellCount = 0;
             for (int i = 0; i < walkable.Length; i++)
                 if (walkable[i]) walkableCellCount++;
             Log.Debug($"[Minimap] TerrainGrid baked: {cols}x{rows} cells ({CellSize}m each), margin={margin:F0}m, " +
                 $"covering X[{minX:F0},{maxX:F0}] Z[{minZ:F0},{maxZ:F0}], " +
-                $"{walkableCellCount}/{walkable.Length} walkable ({roadCellCount} near roads), " +
+                $"{walkableCellCount}/{walkable.Length} walkable ({roadCellCount} near roads, {indoorCellCount} indoor of which {mapBuildingCellCount} via map art), " +
                 $"non-walkable breakdown: {noGroundCount} no-ground, {waterCount} water, {obstructedCount} obstructed, " +
                 $"step {bakedStepOffset:F2}m / slope tan {bakedSlopeTan:F2}, " +
                 $"{sw.ElapsedMilliseconds}ms.");
@@ -259,6 +332,7 @@ namespace ScheduleOneNavigator
             unwalkableReason = new byte[cols * rows];
             groundY = new float[cols * rows];
             isRoad = new bool[cols * rows];
+            isIndoor = new bool[cols * rows];
             blockedEdgeRight = new bool[cols * rows];
             blockedEdgeDown = new bool[cols * rows];
             blockedEdgeDiagDR = new bool[cols * rows];
@@ -284,6 +358,8 @@ namespace ScheduleOneNavigator
                 };
             }
             roadCellCount = 0;
+            indoorCellCount = 0;
+            mapBuildingCellCount = 0;
             noGroundCount = 0;
             waterCount = 0;
             obstructedCount = 0;
@@ -361,6 +437,33 @@ namespace ScheduleOneNavigator
                         unwalkableReason[idx] = ReasonObstructed;
                         obstructedCount++;
                         continue;
+                    }
+
+                    // Two probes, since mesh colliders are one-sided: a ray
+                    // up from inside misses an upward-facing roof (seen live:
+                    // 1 indoor cell in a whole town), so also cast down from
+                    // above against every layer - the ground ray above uses
+                    // only the ground mask and passes through roofs that
+                    // aren't on it - and call the cell covered if that hits
+                    // something clearly above head height.
+                    bool covered = Physics.Raycast(head, Vector3.up, IndoorCheckHeight, ~0, QueryTriggerInteraction.Ignore);
+                    if (!covered && Physics.Raycast(rayStart, Vector3.down, out RaycastHit topHit, MaxGroundRayDistance, ~0, QueryTriggerInteraction.Ignore))
+                        covered = topHit.point.y > hit.point.y + bakedObstacleHeight;
+                    // Neither probe sees a building whose roof has no
+                    // collider and whose front is open to physics (the docks
+                    // warehouse: floor at -2.1m, nothing above it, no north
+                    // wall). The game's own map art draws every building
+                    // footprint in one flat dark grey, distinct from roads,
+                    // so use that as a third signal.
+                    if (!covered && MapColorSampler.TryGetColorAt(hit.point, out Color32 footprintColor) && IsMapBuildingColor(footprintColor))
+                    {
+                        covered = true;
+                        mapBuildingCellCount++;
+                    }
+                    if (covered)
+                    {
+                        isIndoor[idx] = true;
+                        indoorCellCount++;
                     }
 
                     if (roadConstraint != null)
@@ -564,6 +667,29 @@ namespace ScheduleOneNavigator
         // top-right-to-bottom-left), and both directions along that
         // orientation resolve to the same stored edge by normalizing to
         // whichever endpoint has the smaller column.
+        // Full diagonal-step test, shared by every search/flood fill so they
+        // can't drift apart. Must be symmetric: the old per-site check only
+        // looked at the two straight edges touching the cell being left, so
+        // A->B could be blocked while B->A was allowed. The fallback flood
+        // fill runs from the destination (backwards) and found connections
+        // the forward A* then couldn't use - it silently fell back to the
+        // unweighted BFS chain, i.e. ignored road/indoor costs entirely
+        // (seen live: every docks->Molly route identical at 140 cells,
+        // straight through the warehouse). Now: corner cells walkable, the
+        // diagonal sweep itself clear, and at least ONE of the two ways
+        // round the corner (the pair of edges at A, or the pair at B) open.
+        static bool IsDiagonalStepBlocked(int col, int row, int dc, int dr)
+        {
+            int nc = col + dc, nr = row + dr;
+            if (!walkable[row * cols + nc] || !walkable[nr * cols + col])
+                return true;
+            if (IsDiagonalEdgeBlocked(col, row, dc, dr))
+                return true;
+            bool nearPairBlocked = IsOrthogonalEdgeBlocked(col, row, dc, 0) || IsOrthogonalEdgeBlocked(col, row, 0, dr);
+            bool farPairBlocked = IsOrthogonalEdgeBlocked(nc, nr, -dc, 0) || IsOrthogonalEdgeBlocked(nc, nr, 0, -dr);
+            return nearPairBlocked && farPairBlocked;
+        }
+
         static bool IsDiagonalEdgeBlocked(int col, int row, int dc, int dr)
         {
             if (dc == dr)
@@ -698,10 +824,7 @@ namespace ScheduleOneNavigator
                             continue;
                         if (dc != 0 && dr != 0)
                         {
-                            if (!walkable[curRow * cols + nc] || !walkable[nr * cols + curCol]
-                                || IsOrthogonalEdgeBlocked(curCol, curRow, dc, 0)
-                                || IsOrthogonalEdgeBlocked(curCol, curRow, 0, dr)
-                                || IsDiagonalEdgeBlocked(curCol, curRow, dc, dr))
+                            if (IsDiagonalStepBlocked(curCol, curRow, dc, dr))
                                 continue;
                         }
                         else if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, dr))
@@ -811,13 +934,7 @@ namespace ScheduleOneNavigator
                             // blocked, yet the diagonal line still clips it
                             // - confirmed live (route cut through a house
                             // corner despite the orthogonal-only check).
-                            int orthA = curRow * cols + nc;
-                            int orthB = nr * cols + curCol;
-                            if (!walkable[orthA] || !walkable[orthB])
-                                continue;
-                            if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, 0) || IsOrthogonalEdgeBlocked(curCol, curRow, 0, dr))
-                                continue;
-                            if (IsDiagonalEdgeBlocked(curCol, curRow, dc, dr))
+                            if (IsDiagonalStepBlocked(curCol, curRow, dc, dr))
                                 continue;
                         }
                         else if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, dr))
@@ -840,6 +957,8 @@ namespace ScheduleOneNavigator
                         }
                         else if (isRoad[nIdx])
                             stepCost *= RoadCostFactor;
+                        if (isIndoor[nIdx])
+                            stepCost *= IndoorCostFactor;
                         float tentativeG = gScore[current] + stepCost;
                         if (tentativeG < gScore[nIdx])
                         {
@@ -908,6 +1027,7 @@ namespace ScheduleOneNavigator
 
             HashSet<int> lastClosed = null, lastEndComponent = null;
             List<Vector3> lastFallbackPath = null;
+            List<Vector3> edgeHuggingPath = null; // found, but squeezed against the bake edge - see ShouldWidenFor
             int startIdx = -1, endIdx = -1, lastEndComponentSize = 0;
             float startSnapDist = 0f, endSnapDist = 0f;
 
@@ -921,7 +1041,11 @@ namespace ScheduleOneNavigator
                 // this check - realistic in-game distances never come
                 // close to the cap at the base 60m margin.
                 if (attempt > 0 && ProjectedCellCount(start, end, margin) > MaxBakedCells)
+                {
+                    if (edgeHuggingPath != null)
+                        return edgeHuggingPath;
                     break;
+                }
 
                 if (!EnsureBakedAtMargin(start, end, margin, allowReuseExisting: attempt == 0))
                 {
@@ -960,8 +1084,15 @@ namespace ScheduleOneNavigator
                 if (path != null)
                 {
                     hasUnreachableCache = false;
+                    if (ShouldWidenFor(path, attempt))
+                    {
+                        edgeHuggingPath = path;
+                        continue;
+                    }
                     return path;
                 }
+                if (edgeHuggingPath != null)
+                    return edgeHuggingPath; // defensive: a wider bake can't disconnect what a narrower one connected
 
                 // Disconnected at this margin. `closed` IS start's connected
                 // component for free (A* run to exhaustion necessarily
@@ -1000,7 +1131,9 @@ namespace ScheduleOneNavigator
                 // climbing all the way to 220m for nothing, adding the new
                 // per-attempt BFS cost on top with no offsetting benefit.
                 bool moreRungsAvailable = attempt < BakeMarginAttemptsMeters.Length - 1;
-                if (moreRungsAvailable && (!ComponentTouchesBoundary(lastClosed) || !ComponentTouchesBoundary(lastEndComponent)))
+                if (moreRungsAvailable && (!ComponentTouchesBoundary(lastClosed) || !ComponentTouchesBoundary(lastEndComponent))
+                    && !ShouldWidenFor(lastFallbackPath, attempt)
+                    && !FallbackLooksClipped(lastFallbackPath, start, lastEndComponent, attempt))
                     break;
             }
 
@@ -1248,8 +1381,8 @@ namespace ScheduleOneNavigator
                         {
                             int orthA = row * cols + nc, orthB = nr * cols + col;
                             if (!walkable[orthA] || !walkable[orthB]) cornerOrthBlocked++;
-                            else if (IsOrthogonalEdgeBlocked(col, row, dc, 0) || IsOrthogonalEdgeBlocked(col, row, 0, dr)) orthBlocked++;
                             else if (IsDiagonalEdgeBlocked(col, row, dc, dr)) diagBlocked++;
+                            else if (IsDiagonalStepBlocked(col, row, dc, dr)) orthBlocked++;
                             else unblocked++; // shouldn't happen if FindPath and this loop agree - flags a logic mismatch if it does
                         }
                         else
@@ -1313,13 +1446,7 @@ namespace ScheduleOneNavigator
                             continue;
                         if (dc != 0 && dr != 0)
                         {
-                            int orthA = curRow * cols + nc;
-                            int orthB = nr * cols + curCol;
-                            if (!walkable[orthA] || !walkable[orthB])
-                                continue;
-                            if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, 0) || IsOrthogonalEdgeBlocked(curCol, curRow, 0, dr))
-                                continue;
-                            if (IsDiagonalEdgeBlocked(curCol, curRow, dc, dr))
+                            if (IsDiagonalStepBlocked(curCol, curRow, dc, dr))
                                 continue;
                         }
                         else if (IsOrthogonalEdgeBlocked(curCol, curRow, dc, dr))
@@ -1372,6 +1499,51 @@ namespace ScheduleOneNavigator
             foreach (int idx in cells)
                 result.Add(CellWorldPos(idx % cols, idx / cols));
             return result;
+        }
+
+        // Verbose-only: writes the current bake (per-cell walkable/reason/
+        // height/road flags and blocked edges) plus start, end and the
+        // returned path to UserData/NavigatorDebug as plain text, so a bad
+        // route can be rendered and inspected offline instead of guessed at
+        // from a map screenshot. Keeps the newest 10 dumps.
+        public static void DumpDebugGrid(Vector3 start, Vector3 end, List<Vector3> path, bool inVehicle)
+        {
+            if (!baked || !Log.Verbose)
+                return;
+            try
+            {
+                string dir = System.IO.Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "NavigatorDebug");
+                System.IO.Directory.CreateDirectory(dir);
+                string file = System.IO.Path.Combine(dir, $"grid-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                using (var w = new System.IO.StreamWriter(file))
+                {
+                    w.WriteLine(string.Format(inv, "grid {0} {1} {2:F2} {3:F2} {4} step {5:F3} slopetan {6:F3} radius {7:F3} height {8:F3} vehicle {9}",
+                        cols, rows, minX, minZ, CellSize, bakedStepOffset, bakedSlopeTan, bakedObstacleRadius, bakedObstacleHeight, inVehicle));
+                    w.WriteLine(string.Format(inv, "start {0:F2} {1:F2} {2:F2}", start.x, start.y, start.z));
+                    w.WriteLine(string.Format(inv, "end {0:F2} {1:F2} {2:F2}", end.x, end.y, end.z));
+                    w.Write("path");
+                    if (path != null)
+                        foreach (Vector3 v in path)
+                            w.Write(string.Format(inv, " {0:F2},{1:F2},{2:F2}", v.x, v.y, v.z));
+                    w.WriteLine();
+                    // walkable reason groundY road blockedRight blockedDown blockedDR blockedDL indoor
+                    for (int i = 0; i < walkable.Length; i++)
+                        w.WriteLine(string.Format(inv, "{0} {1} {2:F2} {3} {4}{5}{6}{7} {8}",
+                            walkable[i] ? 1 : 0, unwalkableReason[i], groundY[i], isRoad[i] ? 1 : 0,
+                            blockedEdgeRight[i] ? 1 : 0, blockedEdgeDown[i] ? 1 : 0,
+                            blockedEdgeDiagDR[i] ? 1 : 0, blockedEdgeDiagDL[i] ? 1 : 0, isIndoor[i] ? 1 : 0));
+                }
+                var old = new List<string>(System.IO.Directory.GetFiles(dir, "grid-*.txt"));
+                old.Sort(StringComparer.Ordinal);
+                for (int i = 0; i < old.Count - 10; i++)
+                    System.IO.File.Delete(old[i]);
+                MelonLogger.Msg($"[Minimap] TerrainGrid debug dump written: {file}");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Minimap] TerrainGrid debug dump failed: {ex.Message}");
+            }
         }
 
         static List<Vector3> ReconstructPath(Dictionary<int, int> cameFrom, int endIdx)
