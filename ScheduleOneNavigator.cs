@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.7.2", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.7.3", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator

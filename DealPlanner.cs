@@ -32,10 +32,92 @@ namespace ScheduleOneNavigator
         // anything scheduled-but-not-yet-due was invisible even though it's
         // a real, active contract.
         public bool AwaitingDelivery;
+        // Normalized product id -> quantity this contract needs; used to plan
+        // several deals against one shared inventory (see SelectDealsForInventory).
+        public Dictionary<string, int> Requirements;
+        // Game minutes until the contract expires, int.MaxValue if it doesn't.
+        public int MinsUntilExpiry = int.MaxValue;
+
+        // Urgency group in whole game hours (0 = expires within the hour);
+        // planning serves lower groups first (user request: "prioritise the
+        // deals that expire next").
+        public int UrgencyHours => MinsUntilExpiry == int.MaxValue ? int.MaxValue : Mathf.Max(0, MinsUntilExpiry) / 60;
     }
 
     public static class DealPlanner
     {
+        static int MinsUntilExpiry(Contract contract)
+        {
+            try { return contract.Expires ? contract.GetMinsUntilExpiry() : int.MaxValue; }
+            catch { return int.MaxValue; }
+        }
+
+        // Inventory snapshot from the latest GatherActiveDeals (normalized
+        // product id -> units held), for planning deals against it together.
+        public static Dictionary<string, int> LastInventory = new Dictionary<string, int>();
+
+        // "Feasible" is checked per deal against the whole inventory, so six
+        // deals each needing <=5 units all looked fulfillable with 5 units
+        // in the bag. This picks what the inventory covers together, short
+        // walks over profit (user request): most urgent expiry group first,
+        // and within it always the nearest deal - from the player, then from
+        // the previous pick - that the remaining stock still covers.
+        public static List<DealInfo> SelectDealsForInventory(List<DealInfo> candidates, Dictionary<string, int> inventory, Vector3 from)
+        {
+            var stock = new Dictionary<string, int>(inventory);
+            var left = new List<DealInfo>(candidates);
+            var picked = new List<DealInfo>();
+
+            bool Fits(DealInfo d)
+            {
+                if (d.Requirements == null)
+                    return false;
+                foreach (var kv in d.Requirements)
+                {
+                    stock.TryGetValue(kv.Key, out int have);
+                    if (kv.Value > have)
+                        return false;
+                }
+                return true;
+            }
+
+            var groups = new List<int>();
+            foreach (DealInfo d in candidates)
+                if (!groups.Contains(d.UrgencyHours))
+                    groups.Add(d.UrgencyHours);
+            groups.Sort();
+
+            Vector3 current = from;
+            foreach (int group in groups)
+            {
+                while (true)
+                {
+                    DealInfo nearest = null;
+                    float nearestDist = float.MaxValue;
+                    foreach (DealInfo d in left)
+                    {
+                        if (d.UrgencyHours != group || !Fits(d))
+                            continue;
+                        float dist = Vector3.Distance(current, d.DeliveryPosition);
+                        if (dist < nearestDist)
+                        {
+                            nearestDist = dist;
+                            nearest = d;
+                        }
+                    }
+                    if (nearest == null)
+                        break;
+
+                    foreach (var kv in nearest.Requirements)
+                        stock[kv.Key] -= kv.Value;
+                    picked.Add(nearest);
+                    left.Remove(nearest);
+                    current = nearest.DeliveryPosition;
+                }
+            }
+            return picked;
+        }
+
         static bool loggedEmptyDiag;
 
         // Mirrors how nugzzMinimap's RadarController finds pending-delivery
@@ -56,6 +138,7 @@ namespace ScheduleOneNavigator
             try
             {
                 inventoryByProductId = GetInventoryByProductId();
+                LastInventory = new Dictionary<string, int>(inventoryByProductId);
             }
             catch (Exception ex)
             {
@@ -119,6 +202,16 @@ namespace ScheduleOneNavigator
                     string productSummary = SummarizeProductList(contract);
                     float payment = contract.Payment;
                     bool feasible = ComputeFeasible(contract, inventoryByProductId);
+                    var requirements = new Dictionary<string, int>();
+                    if (contract.ProductList != null && contract.ProductList.entries != null)
+                        foreach (var entry in contract.ProductList.entries)
+                        {
+                            if (entry == null)
+                                continue;
+                            string id = NormalizeProductId(entry.ProductID);
+                            requirements.TryGetValue(id, out int already);
+                            requirements[id] = already + entry.Quantity;
+                        }
 
                     result.Add(new DealInfo
                     {
@@ -130,6 +223,8 @@ namespace ScheduleOneNavigator
                         Payment = payment,
                         Feasible = feasible,
                         AwaitingDelivery = awaitingDelivery,
+                        Requirements = requirements,
+                        MinsUntilExpiry = MinsUntilExpiry(contract),
                     });
                 }
                 catch (Exception ex)
@@ -406,35 +501,175 @@ namespace ScheduleOneNavigator
             }
         }
 
-        // Simple nearest-neighbor ordering starting from the player's current
-        // position - not a full TSP solve, but for the handful of
-        // simultaneous deals this game realistically has at once (typically
-        // 2-5), greedy nearest-neighbor gets within a few percent of optimal
-        // and is instant, no need for anything heavier.
+        // Everything the "optimal route" needs, from scratch: current deals
+        // and inventory, the subset the inventory covers together, and the
+        // shortest order through it from `from`. Called on the button click
+        // and again on every re-plan while a deal route is active, so
+        // restocking, new or expired deals are picked up on their own.
+        //
+        // stickyContract: the deal currently being walked to. Selection is
+        // nearest-first, so without this the target could flip to another
+        // customer just because the walk passed closer to them; it stays
+        // first as long as it's still ready and nothing more urgent showed up.
+        public static List<DealInfo> PlanDealRoute(Vector3 from, out int readyCount, IntPtr stickyContract = default)
+        {
+            var ready = new List<DealInfo>();
+            foreach (DealInfo d in GatherActiveDeals())
+                if (d.Feasible && d.AwaitingDelivery)
+                    ready.Add(d);
+            readyCount = ready.Count;
+
+            DealInfo sticky = stickyContract == IntPtr.Zero ? null
+                : ready.Find(d => d.Contract != null && d.Contract.Pointer == stickyContract);
+            if (sticky != null && ready.TrueForAll(d => d.UrgencyHours >= sticky.UrgencyHours))
+            {
+                var stock = new Dictionary<string, int>(LastInventory);
+                foreach (var kv in sticky.Requirements)
+                {
+                    stock.TryGetValue(kv.Key, out int have);
+                    stock[kv.Key] = have - kv.Value;
+                }
+                ready.Remove(sticky);
+                var rest = ComputeUrgencyOrder(sticky.DeliveryPosition, SelectDealsForInventory(ready, stock, sticky.DeliveryPosition));
+                rest.Insert(0, sticky);
+                return rest;
+            }
+            return ComputeUrgencyOrder(from, SelectDealsForInventory(ready, LastInventory, from));
+        }
+
+        // Most urgent group first, shortest tour within each group, each
+        // group starting where the previous one ended.
+        public static List<DealInfo> ComputeUrgencyOrder(Vector3 start, List<DealInfo> deals)
+        {
+            var byGroup = new SortedDictionary<int, List<DealInfo>>();
+            foreach (DealInfo d in deals)
+            {
+                if (!byGroup.TryGetValue(d.UrgencyHours, out var list))
+                    byGroup[d.UrgencyHours] = list = new List<DealInfo>();
+                list.Add(d);
+            }
+            var ordered = new List<DealInfo>(deals.Count);
+            Vector3 current = start;
+            foreach (var group in byGroup.Values)
+            {
+                var part = ComputeOptimalOrder(current, group);
+                ordered.AddRange(part);
+                current = part[part.Count - 1].DeliveryPosition;
+            }
+            return ordered;
+        }
+
+        // Shortest open tour (straight-line distance) starting at the
+        // player. Exact for up to ExactOrderMaxStops deals (8! = 40320
+        // orders, still instant); beyond that greedy nearest-neighbour
+        // improved by 2-opt. The old pure nearest-neighbour could start
+        // with the closest customer and then zig-zag across town.
+        const int ExactOrderMaxStops = 8;
+
         public static List<DealInfo> ComputeOptimalOrder(Vector3 start, List<DealInfo> feasibleDeals)
         {
-            var remaining = new List<DealInfo>(feasibleDeals);
-            var ordered = new List<DealInfo>(remaining.Count);
-            Vector3 current = start;
+            int n = feasibleDeals.Count;
+            if (n <= 1)
+                return new List<DealInfo>(feasibleDeals);
 
-            while (remaining.Count > 0)
+            var pts = new Vector3[n];
+            for (int i = 0; i < n; i++)
+                pts[i] = feasibleDeals[i].DeliveryPosition;
+
+            float TourLength(int[] order)
             {
-                int bestIndex = 0;
-                float bestDist = float.MaxValue;
-                for (int i = 0; i < remaining.Count; i++)
-                {
-                    float d = Vector3.Distance(current, remaining[i].DeliveryPosition);
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        bestIndex = i;
-                    }
-                }
-                ordered.Add(remaining[bestIndex]);
-                current = remaining[bestIndex].DeliveryPosition;
-                remaining.RemoveAt(bestIndex);
+                float len = Vector3.Distance(start, pts[order[0]]);
+                for (int i = 1; i < order.Length; i++)
+                    len += Vector3.Distance(pts[order[i - 1]], pts[order[i]]);
+                return len;
             }
 
+            int[] best;
+            if (n <= ExactOrderMaxStops)
+            {
+                var perm = new int[n];
+                for (int i = 0; i < n; i++)
+                    perm[i] = i;
+                best = (int[])perm.Clone();
+                float bestLen = TourLength(best);
+                // Heap's algorithm over all permutations.
+                var c = new int[n];
+                int k = 0;
+                while (k < n)
+                {
+                    if (c[k] < k)
+                    {
+                        int a = k % 2 == 0 ? 0 : c[k];
+                        (perm[a], perm[k]) = (perm[k], perm[a]);
+                        float len = TourLength(perm);
+                        if (len < bestLen)
+                        {
+                            bestLen = len;
+                            best = (int[])perm.Clone();
+                        }
+                        c[k]++;
+                        k = 0;
+                    }
+                    else
+                    {
+                        c[k] = 0;
+                        k++;
+                    }
+                }
+            }
+            else
+            {
+                best = new int[n];
+                var used = new bool[n];
+                Vector3 current = start;
+                for (int step = 0; step < n; step++)
+                {
+                    int bestIndex = -1;
+                    float bestDist = float.MaxValue;
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (used[i])
+                            continue;
+                        float d = Vector3.Distance(current, pts[i]);
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            bestIndex = i;
+                        }
+                    }
+                    used[bestIndex] = true;
+                    best[step] = bestIndex;
+                    current = pts[bestIndex];
+                }
+
+                bool improved = true;
+                while (improved)
+                {
+                    improved = false;
+                    float bestLen = TourLength(best);
+                    for (int i = 0; i < n - 1; i++)
+                    {
+                        for (int j = i + 1; j < n; j++)
+                        {
+                            System.Array.Reverse(best, i, j - i + 1);
+                            float len = TourLength(best);
+                            if (len < bestLen - 0.01f)
+                            {
+                                bestLen = len;
+                                improved = true;
+                            }
+                            else
+                            {
+                                System.Array.Reverse(best, i, j - i + 1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var ordered = new List<DealInfo>(n);
+            foreach (int i in best)
+                ordered.Add(feasibleDeals[i]);
             return ordered;
         }
     }

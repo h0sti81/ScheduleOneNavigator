@@ -1091,6 +1091,104 @@ namespace ScheduleOneNavigator
             {
                 destinationDot.gameObject.SetActive(false);
             }
+
+            UpdateUpcomingStops(posUtil);
+        }
+
+        // Multi-stop routes (optimal route button): only the current leg is
+        // really pathfound, so the rest of the tour used to be invisible and
+        // read as "it only picked the nearest client". Show every stop as a
+        // numbered marker and join the later legs with fainter straight
+        // dots - an overview of the order, not a walkable path.
+        const float UpcomingDotSpacingMeters = 9f;
+        const int MaxUpcomingDots = 200;
+        const float StopMarkerSize = 18f;
+        static readonly Color UpcomingDotColor = new Color(1f, 1f, 1f, 0.35f);
+        static readonly Color StopMarkerColor = new Color(0.25f, 0.85f, 1f, 0.95f);
+
+        readonly List<RectTransform> upcomingDotPool = new List<RectTransform>();
+        readonly List<(RectTransform rect, Text label)> stopMarkerPool = new List<(RectTransform, Text)>();
+
+        void UpdateUpcomingStops(MapPositionUtility posUtil)
+        {
+            var stops = new List<Vector3>();
+            if (routePlanner.HasDestination && routePlanner.QueuedStopsRemaining > 0)
+            {
+                stops.Add(routePlanner.Destination);
+                stops.AddRange(routePlanner.QueuedStopPositions);
+            }
+
+            int usedDots = 0;
+            for (int i = 0; i + 1 < stops.Count && usedDots < MaxUpcomingDots; i++)
+            {
+                Vector3 a = stops[i], b = stops[i + 1];
+                float len = Vector3.Distance(a, b);
+                for (float d = UpcomingDotSpacingMeters; d < len && usedDots < MaxUpcomingDots; d += UpcomingDotSpacingMeters)
+                {
+                    RectTransform dot = GetOrCreateUpcomingDot(usedDots++);
+                    dot.gameObject.SetActive(true);
+                    dot.anchoredPosition = posUtil.GetMapPosition(Vector3.Lerp(a, b, d / len)) * zoom + panOffset;
+                }
+            }
+            for (int i = usedDots; i < upcomingDotPool.Count; i++)
+                upcomingDotPool[i].gameObject.SetActive(false);
+
+            for (int i = 0; i < stops.Count; i++)
+            {
+                var marker = GetOrCreateStopMarker(i);
+                marker.rect.gameObject.SetActive(true);
+                marker.rect.anchoredPosition = posUtil.GetMapPosition(stops[i]) * zoom + panOffset;
+                marker.label.text = (i + 1).ToString();
+            }
+            for (int i = stops.Count; i < stopMarkerPool.Count; i++)
+                stopMarkerPool[i].rect.gameObject.SetActive(false);
+        }
+
+        RectTransform GetOrCreateUpcomingDot(int index)
+        {
+            if (index < upcomingDotPool.Count)
+                return upcomingDotPool[index];
+
+            GameObject dotGO = new GameObject("UpcomingRouteDot");
+            dotGO.transform.SetParent(viewport, false);
+            RectTransform rt = dotGO.AddComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(RouteDotSize * 0.75f, RouteDotSize * 0.75f);
+            dotGO.AddComponent<Image>().sprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)RouteDotSize * 2, UpcomingDotColor);
+            upcomingDotPool.Add(rt);
+            return rt;
+        }
+
+        (RectTransform rect, Text label) GetOrCreateStopMarker(int index)
+        {
+            if (index < stopMarkerPool.Count)
+                return stopMarkerPool[index];
+
+            GameObject markerGO = new GameObject("StopMarker");
+            markerGO.transform.SetParent(viewport, false);
+            RectTransform rt = markerGO.AddComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(StopMarkerSize, StopMarkerSize);
+            markerGO.AddComponent<Image>().sprite = ScheduleOneNavigatorMod.CreateCircleSprite((int)StopMarkerSize * 2, StopMarkerColor);
+
+            GameObject labelGO = new GameObject("Number");
+            labelGO.transform.SetParent(markerGO.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = Vector2.zero;
+            labelRT.anchorMax = Vector2.one;
+            labelRT.offsetMin = labelRT.offsetMax = Vector2.zero;
+            Text label = labelGO.AddComponent<Text>();
+            label.font = GetFont();
+            label.fontSize = 12;
+            label.fontStyle = FontStyle.Bold;
+            label.color = Color.black;
+            label.alignment = TextAnchor.MiddleCenter;
+
+            var entry = (rt, label);
+            stopMarkerPool.Add(entry);
+            return entry;
         }
 
         // Only customers with a currently active deal (i.e. exactly the
@@ -1562,7 +1660,7 @@ namespace ScheduleOneNavigator
             HashSet<Property> owned = new HashSet<Property>();
             if (allProperties != null)
                 foreach (Property p in allProperties)
-                    if (p != null && p.IsOwned)
+                    if (p != null && IsAccessibleProperty(p))
                         owned.Add(p);
 
             List<Property> stale = null;
@@ -1742,6 +1840,9 @@ namespace ScheduleOneNavigator
         // what the rows display and only rebuild when it changed. Tab
         // switches reset all signatures, since the list container's height
         // is shared between tabs and only set by a rebuild.
+        // Deals the optimal route would serve with the current inventory.
+        readonly HashSet<DealInfo> plannedDeals = new HashSet<DealInfo>();
+
         string dealListSignature, shopListSignature, businessListSignature, dealerListSignature, propertyListSignature;
 
         static bool SameListSignature(ref string last, string current)
@@ -2120,8 +2221,26 @@ namespace ScheduleOneNavigator
         {
             currentDeals.Clear();
             currentDeals.AddRange(DealPlanner.GatherActiveDeals());
+            var ready = currentDeals.FindAll(d => d.Feasible && d.AwaitingDelivery);
+            plannedDeals.Clear();
+            if (routePlanner.DealRouteActive)
+            {
+                // Mirror the live route (it keeps its current target sticky).
+                var keys = routePlanner.ActiveDealKeys;
+                foreach (DealInfo d in ready)
+                    if (d.Contract != null && keys.Contains(d.Contract.Pointer))
+                        plannedDeals.Add(d);
+            }
+            else
+            {
+                Vector3 planFrom = Player.Local != null ? ScheduleOneNavigatorMod.GetTrackedPosition(Player.Local) : Vector3.zero;
+                foreach (DealInfo d in DealPlanner.SelectDealsForInventory(ready, DealPlanner.LastInventory, planFrom))
+                    plannedDeals.Add(d);
+            }
 
             var dealSig = new System.Text.StringBuilder();
+            foreach (DealInfo d in currentDeals)
+                dealSig.Append(plannedDeals.Contains(d)).Append(d.UrgencyHours).Append(',');
             foreach (DealInfo d in currentDeals)
                 dealSig.Append(d.CustomerName).Append('|').Append(d.Payment).Append('|').Append(d.ProductSummary).Append('|')
                     .Append(d.Feasible).Append('|').Append(d.AwaitingDelivery).Append('|').Append(d.DeliveryPosition).Append(';');
@@ -2213,7 +2332,9 @@ namespace ScheduleOneNavigator
                 prodRT.offsetMax = new Vector2(-8f, 0f);
                 Text prodText = prodGO.AddComponent<Text>();
                 prodText.font = GetFont();
-                prodText.text = deal.ProductSummary;
+                prodText.text = deal.UrgencyHours == int.MaxValue
+                    ? deal.ProductSummary
+                    : $"{deal.ProductSummary}  ·  {deal.UrgencyHours}h left";
                 prodText.fontSize = 12;
                 prodText.color = DealRowSubTextColor;
                 prodText.alignment = TextAnchor.MiddleLeft;
@@ -2229,9 +2350,14 @@ namespace ScheduleOneNavigator
                 tagRT.offsetMax = new Vector2(-8f, 0f);
                 Text tagText = tagGO.AddComponent<Text>();
                 tagText.font = GetFont();
-                tagText.text = deal.Feasible ? "ready" : "missing product";
+                // "ready" = in the optimal route; individually coverable but
+                // not together with the planned ones = "not enough stock".
+                tagText.text = !deal.Feasible ? "missing product"
+                    : !deal.AwaitingDelivery ? "ready"
+                    : plannedDeals.Contains(deal) ? "in route" : "not enough stock";
                 tagText.fontSize = 11;
-                tagText.color = deal.Feasible ? DealFeasibleTagColor : DealInfeasibleTagColor;
+                tagText.color = deal.Feasible && (!deal.AwaitingDelivery || plannedDeals.Contains(deal))
+                    ? DealFeasibleTagColor : DealInfeasibleTagColor;
                 tagText.alignment = TextAnchor.MiddleLeft;
 
                 dealRows.Add((rowRT, deal));
@@ -2269,38 +2395,25 @@ namespace ScheduleOneNavigator
             // Planned (not-yet-awaiting) deals are excluded here - routing
             // to a delivery that isn't due yet is premature, this button is
             // specifically "go fulfill something right now".
-            int feasibleCount = 0;
+            int readyCount = 0;
             foreach (var d in currentDeals)
                 if (d.Feasible && d.AwaitingDelivery)
-                    feasibleCount++;
+                    readyCount++;
+            int plannedCount = plannedDeals.Count;
 
-            routeButtonImage.color = feasibleCount > 0 ? RouteButtonColor : RouteButtonDisabledColor;
-            routeButtonText.text = feasibleCount > 0
-                ? $"Optimal route ({feasibleCount})"
-                : "Optimal route (no product)";
+            routeButtonImage.color = plannedCount > 0 ? RouteButtonColor : RouteButtonDisabledColor;
+            routeButtonText.text = plannedCount == 0 ? "Optimal route (no product)"
+                : plannedCount < readyCount ? $"Optimal route ({plannedCount} of {readyCount})"
+                : $"Optimal route ({plannedCount})";
         }
 
         void HandleOptimalRouteButtonClicked(Player player)
         {
-            var feasible = new List<DealInfo>();
-            foreach (var d in currentDeals)
-                if (d.Feasible && d.AwaitingDelivery)
-                    feasible.Add(d);
-
-            if (feasible.Count == 0)
-            {
+            // Planning (inventory-aware selection, urgency, order) and the
+            // 1.5s re-plan live in RoutePlanner/DealPlanner, so the route
+            // keeps adapting with the map closed too.
+            if (!routePlanner.StartDealRoute(ScheduleOneNavigatorMod.GetTrackedPosition(player)))
                 Log.Debug("[Minimap] FullMapView: optimal-route button clicked, but no deal is currently fulfillable with the inventory on hand.");
-                return;
-            }
-
-            var ordered = DealPlanner.ComputeOptimalOrder(ScheduleOneNavigatorMod.GetTrackedPosition(player), feasible);
-            var stops = new List<Vector3>(ordered.Count);
-            foreach (var d in ordered)
-                stops.Add(d.DeliveryPosition);
-
-            Log.Debug($"[Minimap] FullMapView: optimal route set through {stops.Count} deal(s): " +
-                string.Join(" -> ", ordered.ConvertAll(d => d.CustomerName)));
-            routePlanner.SetRoute(stops);
         }
 
         // Same destroy/rebuild shape as RefreshDeals, but a single-line row
@@ -2595,10 +2708,24 @@ namespace ScheduleOneNavigator
         // FindClickedPropertyRow, matching how their marker is omitted
         // entirely in RefreshPropertyMarkers - the user asked for unowned
         // entries to be inert, not just visually dimmed.
+        // The Sewer Office reports IsOwned from the start, but it can't be
+        // entered until the sewer is unlocked with the key - it showed up as
+        // an owned, routable property for players without the key.
+        static bool IsLockedProperty(Property p)
+        {
+            if (!p.IsOwned || p.TryCast<SewerOffice>() == null)
+                return false;
+            return !(Il2CppScheduleOne.DevUtilities.NetworkSingleton<SewerManager>.InstanceExists
+                && Il2CppScheduleOne.DevUtilities.NetworkSingleton<SewerManager>.Instance.IsSewerUnlocked);
+        }
+
+        static bool IsAccessibleProperty(Property p) => p.IsOwned && !IsLockedProperty(p);
+
         void RefreshPropertyList()
         {
             currentProperties.Clear();
             var ownedGroup = new List<Property>();
+            var lockedGroup = new List<Property>();
             var unownedGroup = new List<Property>();
             var allProperties = Property.Properties;
             if (allProperties != null)
@@ -2606,16 +2733,18 @@ namespace ScheduleOneNavigator
                 {
                     if (p == null)
                         continue;
-                    (p.IsOwned ? ownedGroup : unownedGroup).Add(p);
+                    (IsAccessibleProperty(p) ? ownedGroup : IsLockedProperty(p) ? lockedGroup : unownedGroup).Add(p);
                 }
             ownedGroup.Sort((a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
+            lockedGroup.Sort((a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
             unownedGroup.Sort((a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
             currentProperties.AddRange(ownedGroup);
+            currentProperties.AddRange(lockedGroup);
             currentProperties.AddRange(unownedGroup);
 
             var propertySig = new System.Text.StringBuilder();
             foreach (Property p in currentProperties)
-                propertySig.Append(p.GetInstanceID()).Append('|').Append(p.PropertyName).Append('|').Append(p.IsOwned)
+                propertySig.Append(p.GetInstanceID()).Append('|').Append(p.PropertyName).Append('|').Append(IsAccessibleProperty(p)).Append(IsLockedProperty(p))
                     .Append('|').Append(p.Price).Append('|').Append(p == selectedProperty).Append(';');
             if (SameListSignature(ref propertyListSignature, propertySig.ToString()))
                 return;
@@ -2670,7 +2799,8 @@ namespace ScheduleOneNavigator
                 rowRT.pivot = new Vector2(0.5f, 1f);
                 rowRT.anchoredPosition = new Vector2(0f, -y);
                 rowRT.sizeDelta = new Vector2(0f, PropertyRowHeight - 4f);
-                Color baseColor = p.IsOwned ? PropertyRowOwnedColor : PropertyRowUnownedColor;
+                bool accessible = IsAccessibleProperty(p);
+                Color baseColor = accessible ? PropertyRowOwnedColor : PropertyRowUnownedColor;
                 rowGO.AddComponent<Image>().color = p == selectedProperty ? Highlight(baseColor) : baseColor;
 
                 GameObject nameGO = new GameObject("Name");
@@ -2682,9 +2812,11 @@ namespace ScheduleOneNavigator
                 nameRT.offsetMax = new Vector2(-8f, 0f);
                 Text nameText = nameGO.AddComponent<Text>();
                 nameText.font = GetFont();
-                nameText.text = p.IsOwned ? p.PropertyName : $"{p.PropertyName} (${p.Price:F0})";
+                nameText.text = accessible ? p.PropertyName
+                    : IsLockedProperty(p) ? $"{p.PropertyName} (no key)"
+                    : $"{p.PropertyName} (${p.Price:F0})";
                 nameText.fontSize = 15;
-                nameText.color = p.IsOwned ? DealRowTextColor : DealRowSubTextColor;
+                nameText.color = accessible ? DealRowTextColor : DealRowSubTextColor;
                 nameText.alignment = TextAnchor.MiddleLeft;
                 nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 nameText.verticalOverflow = VerticalWrapMode.Truncate;
@@ -2697,6 +2829,12 @@ namespace ScheduleOneNavigator
             {
                 AddHeader("Owned");
                 foreach (Property p in ownedGroup)
+                    AddRow(p);
+            }
+            if (lockedGroup.Count > 0)
+            {
+                AddHeader("Locked");
+                foreach (Property p in lockedGroup)
                     AddRow(p);
             }
             if (unownedGroup.Count > 0)
@@ -2712,7 +2850,7 @@ namespace ScheduleOneNavigator
         Property FindClickedPropertyRow(Vector2 screenPoint)
         {
             foreach (var row in propertyRows)
-                if (row.property.IsOwned && row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
+                if (IsAccessibleProperty(row.property) && row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
                     return row.property;
             return null;
         }

@@ -9,11 +9,11 @@ A full-screen map and navigation overlay for **Schedule I**, built on top of [Me
 - **Minimap** (top-right HUD): live top-down view centered on the player (follows you correctly while driving too), with other multiplayer players shown as green dots and recruitable customers highlighted with a red aura.
 - **Full map overlay**: opens from your phone's home screen (look for the "N" icon) - pan and click anywhere to set a route, shown as a dotted line and followed on the minimap.
 - **Vehicle-aware routing**: on foot, routes go anywhere you can walk (lightly preferring roads and sidewalks); in a vehicle they take the shortest way onto the road network and stay on it until close to the destination.
-- **Deals tab**: your currently active delivery contracts (plus deals already scheduled but not yet awaiting delivery), with an "optimal route" button that orders all fulfillable deals into a single efficient route based on what's in your inventory. Recruitable customers are shown here too (red aura) and can be clicked to route to them.
+- **Deals tab**: your currently active delivery contracts (plus deals already scheduled but not yet awaiting delivery), with an "optimal route" button that plans a delivery tour for the stock you actually carry: deals that expire soonest first, then always the nearest customer your remaining stock still covers. All stops are shown numbered on the map, and the tour re-plans itself as deals are handed over, restocked, added or expire.. Recruitable customers are shown here too (red aura) and can be clicked to route to them.
 - **Shops tab**: real in-world retail locations (gas stations, hardware stores, clothing, pawn shop, casino, barbershop, tattoo parlor, auto dealerships, ...), click a marker or list entry to route to it.
 - **Businesses tab**: your money-laundering fronts (laundromat, car wash, ...); ones still for sale are listed with their price.
 - **Dealers & Suppliers tab**: every dealer and supplier NPC, grouped and sorted, with a clear visual indicator for which ones you've already unlocked.
-- **Properties tab**: every property in the game, grouped into owned/not-yet-owned - owned ones are fully navigable, unowned ones show their price and are grayed out.
+- **Properties tab**: every property in the game, grouped into owned / locked (e.g. the Sewer Office before you have its key) / for sale - owned ones are fully navigable, the others are grayed out.
 - Other connected players are shown as a green dot (with name label) on both the minimap and the full map.
 
 ## Requirements

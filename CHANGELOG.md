@@ -5,6 +5,26 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.7.3] - 2026-10-11
+
+- **Optimale Route rechnet mit dem echten Vorrat**: bisher wurde jeder Deal
+  einzeln gegen das Inventar geprüft - mit 5 Stück galten sechs Deals als
+  erfüllbar, die zusammen 17 brauchten. Jetzt wird nur geplant, was der Vorrat
+  gemeinsam abdeckt. Liste zeigt "in route" / "not enough stock" /
+  "missing product", Button z. B. "Optimal route (2 of 6)".
+- **Priorität**: zuerst Deals, die als Nächstes ablaufen, dann kurze Wege vor
+  Profit - immer der nächste Kunde, den der restliche Vorrat noch abdeckt.
+  Restzeit steht jetzt bei jedem Deal ("3h left").
+- **Ganze Tour sichtbar**: alle Stopps nummeriert auf der Karte, spätere
+  Etappen als blasse Linie (vorher war nur der nächste Kunde zu sehen).
+- **Route plant sich laufend neu** (alle 1,5 s und nach jeder Übergabe):
+  Nachladen, neue oder abgelaufene Deals werden automatisch berücksichtigt;
+  das aktuelle Ziel bleibt dabei stabil. Weitergeschaltet wird erst nach der
+  tatsächlichen Übergabe, nicht schon beim Ankommen.
+- **Ankunft im Fahrzeug** zählt ab 8 m statt 3 m.
+- **Sewer Office ohne Schlüssel** steht jetzt unter "Locked" (ohne Marker,
+  nicht anklickbar) statt als Eigentum.
+
 ## [v0.7.2] - 2026-10-11
 
 - **Biz-Tab unterscheidet jetzt gekauft/nicht gekauft**: bisher wurden alle
@@ -144,7 +164,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden-Aura), Tablet-Overlay mit Tabs Deals/Shops/Businesses/Dealers/
   Eigentum, Auto-Routing über eigenes TerrainGrid-Pathfinding.
 
-[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.3...HEAD
+[v0.7.3]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.2...v0.7.3
 [v0.7.2]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.1...v0.7.2
 [v0.7.1]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...v0.7.1
 [v0.7]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.6...v0.7
