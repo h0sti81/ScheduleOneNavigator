@@ -5,6 +5,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.7.4] - 2026-10-11
+
 - **TAB-Eigenheit behoben**: wurde die Karte mit M geöffnet und wieder
   geschlossen, öffnete TAB danach die alte Spielkarte statt des Handys - so
   lange, bis eine Karte per Rechtsklick geschlossen wurde. Ursache: beim
@@ -174,7 +176,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden-Aura), Tablet-Overlay mit Tabs Deals/Shops/Businesses/Dealers/
   Eigentum, Auto-Routing über eigenes TerrainGrid-Pathfinding.
 
-[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.4...HEAD
+[v0.7.4]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.3...v0.7.4
 [v0.7.3]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.2...v0.7.3
 [v0.7.2]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.1...v0.7.2
 [v0.7.1]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...v0.7.1
