@@ -30,6 +30,7 @@ namespace ScheduleOneNavigator
         float recalcTimer;
         int consecutiveFailures;
         bool lastInVehicle;
+        double lastPathMs;
 
         readonly List<Vector3> waypoints = new List<Vector3>();
         readonly Queue<Vector3> queuedStops = new Queue<Vector3>();
@@ -128,7 +129,9 @@ namespace ScheduleOneNavigator
                 Log.Debug($"[Minimap] Route mode: {(inVehicle ? "vehicle (roads strongly preferred)" : "on foot")}.");
             }
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var raw = TerrainGrid.FindPath(start, end, inVehicle, out string failReason);
+            lastPathMs = sw.Elapsed.TotalMilliseconds;
             if (raw == null || raw.Count == 0)
             {
                 consecutiveFailures++;
@@ -153,7 +156,7 @@ namespace ScheduleOneNavigator
 
             float endOffset = Vector3.Distance(raw[raw.Count - 1], destination);
             Log.Debug($"[Minimap] Path found: {raw.Count} raw cells -> {waypoints.Count} after simplify. " +
-                $"Requested dest {destination}, actual path end {raw[raw.Count - 1]}, snap offset {endOffset:F1}m.");
+                $"Requested dest {destination}, actual path end {raw[raw.Count - 1]}, snap offset {endOffset:F1}m, {lastPathMs:F1}ms.");
         }
 
         // Was 1.5m - but that could smooth away a real, deliberate bend the

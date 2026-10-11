@@ -14,6 +14,14 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   `UserData/MelonPreferences.cfg`.
 - Kartentitel auf Englisch ("Map" statt "Karte"), passend zum Rest der
   Oberfläche.
+- **Ruckler bei offener Karte behoben**: die Listen im linken Bereich wurden
+  jede Sekunde komplett zerstört und neu aufgebaut (inkl. Neuaufbau der
+  ganzen Oberfläche), im Shops-Tab dazu vier Szenen-Suchen pro Sekunde.
+  Listen werden jetzt nur noch neu aufgebaut, wenn sich ihr Inhalt ändert,
+  und die Szenen-Suchen werden zwischengespeichert.
+- **Schnellere Routensuche**: die A*-Suche nutzt jetzt eine
+  Prioritätswarteschlange statt einer linear durchsuchten Liste (3-8x
+  schneller, besonders im Fahrzeugmodus).
 
 ## [v0.7] - 2026-10-11
 

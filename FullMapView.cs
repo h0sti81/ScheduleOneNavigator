@@ -1728,6 +1728,56 @@ namespace ScheduleOneNavigator
         // Markers/rows are keyed by the real underlying Transform (whichever
         // of the above actually held that shop's position), not by a
         // shop-specific type, since there isn't one common type to key by.
+        // Each tab's list refresh runs every second while that tab is open.
+        // Destroying and recreating every row (plus its Text) each time
+        // forced a full canvas + font-mesh rebuild of the overlay - a
+        // periodic hitch. The refreshes now build a signature of exactly
+        // what the rows display and only rebuild when it changed. Tab
+        // switches reset all signatures, since the list container's height
+        // is shared between tabs and only set by a rebuild.
+        string dealListSignature, shopListSignature, businessListSignature, dealerListSignature, propertyListSignature;
+
+        static bool SameListSignature(ref string last, string current)
+        {
+            if (last == current)
+                return true;
+            last = current;
+            return false;
+        }
+
+        void ResetListSignatures()
+        {
+            dealListSignature = shopListSignature = businessListSignature = dealerListSignature = propertyListSignature = null;
+        }
+
+        // FindObjectsOfType walks the whole scene and is expensive under
+        // Il2Cpp; RefreshShops runs every second while the Shops tab is open
+        // and used to do four of these each time (a visible hitch, worst
+        // while driving). These shops don't move, so a scan is reused for
+        // SceneScanCacheSeconds, or redone early if a cached object died.
+        const float SceneScanCacheSeconds = 30f;
+
+        struct SceneScan<T> where T : UnityEngine.Object
+        {
+            public List<T> Items;
+            public float ScannedAt;
+        }
+
+        SceneScan<Il2CppScheduleOne.Map.Dealership> cachedDealerships;
+        SceneScan<Il2CppScheduleOne.UI.CharacterCustomization.BarbershopUI> cachedBarbershopUIs;
+        SceneScan<Il2CppScheduleOne.UI.CharacterCustomization.TattooShopUI> cachedTattooShopUIs;
+        SceneScan<Il2CppScheduleOne.Casino.CasinoGameInteraction> cachedCasinoGameInteractions;
+
+        static List<T> CachedSceneScan<T>(ref SceneScan<T> scan) where T : UnityEngine.Object
+        {
+            if (scan.Items == null || Time.unscaledTime - scan.ScannedAt > SceneScanCacheSeconds || scan.Items.Exists(o => o == null))
+            {
+                scan.Items = new List<T>(UnityEngine.Object.FindObjectsOfType<T>());
+                scan.ScannedAt = Time.unscaledTime;
+            }
+            return scan.Items;
+        }
+
         void RefreshShops()
         {
             currentShops.Clear();
@@ -1825,7 +1875,7 @@ namespace ScheduleOneNavigator
             // Dealership instances exist, all the extra ones would also be
             // labelled "Hyland Auto" - not distinguishable without a live
             // check, per the user's explicit "include everything" request.
-            foreach (Il2CppScheduleOne.Map.Dealership dealership in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.Map.Dealership>())
+            foreach (Il2CppScheduleOne.Map.Dealership dealership in CachedSceneScan(ref cachedDealerships))
             {
                 if (dealership == null || dealership == jeremyDealership)
                     continue;
@@ -1845,7 +1895,7 @@ namespace ScheduleOneNavigator
             // necessarily a walkable ground position; routing to it failed
             // live for Top Tattoos on 2026-09-19 (RigContainer, where the
             // avatar preview actually stands, should be closer to the floor).
-            foreach (Il2CppScheduleOne.UI.CharacterCustomization.BarbershopUI ui in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.UI.CharacterCustomization.BarbershopUI>())
+            foreach (Il2CppScheduleOne.UI.CharacterCustomization.BarbershopUI ui in CachedSceneScan(ref cachedBarbershopUIs))
             {
                 if (ui == null)
                     continue;
@@ -1862,7 +1912,7 @@ namespace ScheduleOneNavigator
                     currentShops.Add((pos, "Barbershop"));
             }
 
-            foreach (Il2CppScheduleOne.UI.CharacterCustomization.TattooShopUI ui in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.UI.CharacterCustomization.TattooShopUI>())
+            foreach (Il2CppScheduleOne.UI.CharacterCustomization.TattooShopUI ui in CachedSceneScan(ref cachedTattooShopUIs))
             {
                 if (ui == null)
                     continue;
@@ -1881,7 +1931,7 @@ namespace ScheduleOneNavigator
 
             // Casino - several CasinoGameInteraction table components exist,
             // one marker is enough; take the first one found.
-            foreach (Il2CppScheduleOne.Casino.CasinoGameInteraction table in UnityEngine.Object.FindObjectsOfType<Il2CppScheduleOne.Casino.CasinoGameInteraction>())
+            foreach (Il2CppScheduleOne.Casino.CasinoGameInteraction table in CachedSceneScan(ref cachedCasinoGameInteractions))
             {
                 if (table == null)
                     continue;
@@ -1922,6 +1972,12 @@ namespace ScheduleOneNavigator
 
             // Row list - same destroy/rebuild-every-refresh shape as
             // RefreshDeals/RefreshBusinessList.
+            var shopSig = new System.Text.StringBuilder();
+            foreach (var (position, name) in currentShops)
+                shopSig.Append(position.GetInstanceID()).Append('|').Append(name).Append('|').Append(position == selectedShop).Append(';');
+            if (SameListSignature(ref shopListSignature, shopSig.ToString()))
+                return;
+
             foreach (var row in shopRows)
                 GameObject.Destroy(row.rect.gameObject);
             shopRows.Clear();
@@ -2057,6 +2113,16 @@ namespace ScheduleOneNavigator
         {
             currentDeals.Clear();
             currentDeals.AddRange(DealPlanner.GatherActiveDeals());
+
+            var dealSig = new System.Text.StringBuilder();
+            foreach (DealInfo d in currentDeals)
+                dealSig.Append(d.CustomerName).Append('|').Append(d.Payment).Append('|').Append(d.ProductSummary).Append('|')
+                    .Append(d.Feasible).Append('|').Append(d.AwaitingDelivery).Append('|').Append(d.DeliveryPosition).Append(';');
+            if (SameListSignature(ref dealListSignature, dealSig.ToString()))
+            {
+                RefreshCustomerMarkers(); // still part of every deal refresh, see the end of this method
+                return;
+            }
 
             foreach (var row in dealRows)
                 GameObject.Destroy(row.rect.gameObject);
@@ -2242,6 +2308,12 @@ namespace ScheduleOneNavigator
                     if (b != null)
                         currentBusinesses.Add(b);
 
+            var businessSig = new System.Text.StringBuilder();
+            foreach (Business b in currentBusinesses)
+                businessSig.Append(b.GetInstanceID()).Append('|').Append(b.PropertyName).Append('|').Append(b == selectedBusiness).Append(';');
+            if (SameListSignature(ref businessListSignature, businessSig.ToString()))
+                return;
+
             foreach (var row in businessRows)
                 GameObject.Destroy(row.rect.gameObject);
             businessRows.Clear();
@@ -2327,6 +2399,13 @@ namespace ScheduleOneNavigator
             supplierGroup.Sort((a, b) => string.CompareOrdinal(a.FullName, b.FullName));
             currentDealerNpcs.AddRange(dealerGroup);
             currentDealerNpcs.AddRange(supplierGroup);
+
+            var dealerSig = new System.Text.StringBuilder().Append(dealerGroup.Count).Append('/').Append(supplierGroup.Count).Append(';');
+            foreach (NPC npc in currentDealerNpcs)
+                dealerSig.Append(npc.GetInstanceID()).Append('|').Append(npc.FullName).Append('|')
+                    .Append(GetDealerAvailability(npc)).Append('|').Append(npc == selectedDealer).Append(';');
+            if (SameListSignature(ref dealerListSignature, dealerSig.ToString()))
+                return;
 
             foreach (var row in dealerRows)
                 GameObject.Destroy(row.rect.gameObject);
@@ -2464,6 +2543,13 @@ namespace ScheduleOneNavigator
             currentProperties.AddRange(ownedGroup);
             currentProperties.AddRange(unownedGroup);
 
+            var propertySig = new System.Text.StringBuilder();
+            foreach (Property p in currentProperties)
+                propertySig.Append(p.GetInstanceID()).Append('|').Append(p.PropertyName).Append('|').Append(p.IsOwned)
+                    .Append('|').Append(p.Price).Append('|').Append(p == selectedProperty).Append(';');
+            if (SameListSignature(ref propertyListSignature, propertySig.ToString()))
+                return;
+
             foreach (var row in propertyRows)
                 GameObject.Destroy(row.rect.gameObject);
             propertyRows.Clear();
@@ -2583,6 +2669,7 @@ namespace ScheduleOneNavigator
             selectedBusiness = null;
             selectedDealer = null;
             selectedProperty = null;
+            ResetListSignatures();
             // Force an immediate refresh of the tab being switched into,
             // instead of waiting out its refresh interval.
             if (mode == MapViewMode.Deals)

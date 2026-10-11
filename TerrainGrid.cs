@@ -725,15 +725,20 @@ namespace ScheduleOneNavigator
         // even on failure.
         static List<Vector3> TryAStar(int startIdx, int endIdx, int endCol, int endRow, out HashSet<int> closed)
         {
-            var gScore = new Dictionary<int, float>();
+            // Binary-heap open set with lazy deletion (stale entries are
+            // skipped when popped) and a flat gScore array. The old
+            // List + linear best-score scan was O(open) per pop with a
+            // dictionary lookup per entry - fine for short walks, but a
+            // vehicle-mode search (off-road x6 widens the explored area) or
+            // a fallback search across a whole 8000-cell region cost
+            // 100ms+ and showed up as a hitch on every 1.5s re-plan.
+            var gScore = new float[cols * rows];
+            Array.Fill(gScore, float.PositiveInfinity);
             var cameFrom = new Dictionary<int, int>();
-            var open = new List<int>();
-            var openSet = new HashSet<int>();
+            var open = new PriorityQueue<int, float>();
             closed = new HashSet<int>();
 
             gScore[startIdx] = 0f;
-            open.Add(startIdx);
-            openSet.Add(startIdx);
 
             float HeuristicCells(int idx)
             {
@@ -742,24 +747,13 @@ namespace ScheduleOneNavigator
                 return Mathf.Sqrt(dc * dc + dr * dr);
             }
 
-            int guard = cols * rows + 16; // hard cap so a bug can't hang the frame forever
+            int guard = cols * rows * 8 + 16; // hard cap so a bug can't hang the frame forever; x8 = one queue entry per incoming edge (lazy deletion)
+            open.Enqueue(startIdx, HeuristicCells(startIdx));
             while (open.Count > 0 && guard-- > 0)
             {
-                int bestPos = 0;
-                float bestScore = gScore[open[0]] + HeuristicCells(open[0]);
-                for (int i = 1; i < open.Count; i++)
-                {
-                    float score = gScore[open[i]] + HeuristicCells(open[i]);
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestPos = i;
-                    }
-                }
-
-                int current = open[bestPos];
-                open.RemoveAt(bestPos);
-                openSet.Remove(current);
+                int current = open.Dequeue();
+                if (closed.Contains(current))
+                    continue; // stale duplicate, already expanded at a lower cost
 
                 if (current == endIdx)
                     return ReconstructPath(cameFrom, current);
@@ -822,15 +816,11 @@ namespace ScheduleOneNavigator
                         else if (isRoad[nIdx])
                             stepCost *= RoadCostFactor;
                         float tentativeG = gScore[current] + stepCost;
-                        if (!gScore.TryGetValue(nIdx, out float existingG) || tentativeG < existingG)
+                        if (tentativeG < gScore[nIdx])
                         {
                             gScore[nIdx] = tentativeG;
                             cameFrom[nIdx] = current;
-                            if (!openSet.Contains(nIdx))
-                            {
-                                open.Add(nIdx);
-                                openSet.Add(nIdx);
-                            }
+                            open.Enqueue(nIdx, tentativeG + HeuristicCells(nIdx));
                         }
                     }
                 }
