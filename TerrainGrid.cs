@@ -1061,6 +1061,8 @@ namespace ScheduleOneNavigator
         // attempt fails.
         static void LogLocalReasonBreakdown(int idx, string label)
         {
+            if (!Log.Verbose)
+                return; // diagnostics only - also avoids the 16MB map texture readback
             if (idx == lastBreakdownIdx)
                 return;
             lastBreakdownIdx = idx;
@@ -1200,6 +1202,8 @@ namespace ScheduleOneNavigator
         // continuing to guess.
         static void LogComponentBoundary(HashSet<int> component, string label)
         {
+            if (!Log.Verbose)
+                return; // diagnostics only - also avoids the 16MB map texture readback
             // component.Count is already capped at SmallComponentLogThreshold
             // by the caller, and it's a HashSet snapshot from this bake, not
             // stable across calls - re-derive a representative idx to dedupe
