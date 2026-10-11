@@ -121,7 +121,7 @@ namespace ScheduleOneNavigator
             // reason. Added after a user report that TAB stopped closing the map -
             // this logging is what surfaced the real cause (the patch failing to
             // register at all, see the parameter-naming comment above).
-            MelonLogger.Msg($"[Minimap] PhoneSetIsOpenCursorPatch: Postfix open={__0}, " +
+            Log.Debug($"[Minimap] PhoneSetIsOpenCursorPatch: Postfix open={__0}, " +
                 $"closingFullMapView={closingFullMapView}, FullMapView.Instance!=null={FullMapView.Instance != null}, " +
                 $"FullMapView.Instance.Visible={(FullMapView.Instance != null ? FullMapView.Instance.Visible.ToString() : "n/a")}");
 

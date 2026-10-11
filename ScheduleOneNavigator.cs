@@ -7,7 +7,7 @@ using Il2CppScheduleOne.PlayerScripts;
 using Il2CppScheduleOne.Economy;
 using Il2CppScheduleOne.UI;
 
-[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.7.0", "h0sti")]
+[assembly: MelonInfo(typeof(ScheduleOneNavigator.ScheduleOneNavigatorMod), "ScheduleOne Navigator", "0.7.1", "h0sti")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace ScheduleOneNavigator
@@ -57,6 +57,11 @@ namespace ScheduleOneNavigator
 
         float markerRefreshTimer;
         bool initialized;
+
+        public override void OnInitializeMelon()
+        {
+            Log.Init();
+        }
 
         public override void OnUpdate()
         {
@@ -275,7 +280,7 @@ namespace ScheduleOneNavigator
                 if (!string.IsNullOrEmpty(name))
                     hidden.Add($"{layer}:{name}");
             }
-            MelonLogger.Msg($"[Minimap] Using {mainCam.name}'s culling mask; hidden layers: {(hidden.Count > 0 ? string.Join(", ", hidden) : "none")}.");
+            Log.Debug($"[Minimap] Using {mainCam.name}'s culling mask; hidden layers: {(hidden.Count > 0 ? string.Join(", ", hidden) : "none")}.");
         }
 
         void UpdateCamera(Player player)

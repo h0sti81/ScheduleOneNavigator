@@ -39,6 +39,17 @@ MelonLoader works the same way whether you're on Windows or on Linux/Steam Deck 
 - Click anywhere on the map, or on a marker/list row, to set a route there. Press `Esc` or close the phone to close it.
 - Right-click-drag to pan the map.
 
+## Troubleshooting / bug reports
+
+The mod keeps the MelonLoader log quiet by default. To get detailed pathfinding and UI diagnostics for a bug report, start the game once with the mod installed, then set this in `UserData/MelonPreferences.cfg` and restart:
+
+```
+[ScheduleOneNavigator]
+VerboseLogging = true
+```
+
+The output ends up in `MelonLoader/Latest.log`.
+
 ## Uninstalling
 
 Delete `ScheduleOneNavigator.dll` from the `Mods` folder.

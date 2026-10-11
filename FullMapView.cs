@@ -523,14 +523,14 @@ namespace ScheduleOneNavigator
                 // PhoneIntegration.cs, since it never runs through this
                 // Tick() method at all).
                 closeToPhoneHome = true;
-                MelonLogger.Msg($"[Minimap] FullMapView: Escape - before close: " +
+                Log.Debug($"[Minimap] FullMapView: Escape - before close: " +
                     $"MapApp.isOpen={MapApp.Instance?.isOpen}, Phone.IsAnyAppOpen={Phone.Instance?.IsAnyAppOpen}, " +
                     $"HomeScreen.isOpen={HomeScreen.Instance?.isOpen}, AppsCanvas.isOpen={AppsCanvas.Instance?.isOpen}");
                 Phone.Instance?.RequestCloseApp();
                 closingViaOwnKeyHandling = true;
                 MapApp.Instance?.SetOpen(false);
                 closingViaOwnKeyHandling = false;
-                MelonLogger.Msg($"[Minimap] FullMapView: Escape - after close: " +
+                Log.Debug($"[Minimap] FullMapView: Escape - after close: " +
                     $"MapApp.isOpen={MapApp.Instance?.isOpen}, Phone.IsAnyAppOpen={Phone.Instance?.IsAnyAppOpen}, " +
                     $"HomeScreen.isOpen={HomeScreen.Instance?.isOpen}, AppsCanvas.isOpen={AppsCanvas.Instance?.isOpen}");
                 return;
@@ -680,11 +680,11 @@ namespace ScheduleOneNavigator
                 // after our own Tick() reassertion runs) or whether a punch
                 // is somehow executing despite it staying false.
                 if (punchController != null)
-                    MelonLogger.Msg($"[Minimap] FullMapView: punch-block diag on click - " +
+                    Log.Debug($"[Minimap] FullMapView: punch-block diag on click - " +
                         $"PunchingEnabled={punchController.PunchingEnabled}, IsPunching={punchController.IsPunching}, " +
                         $"IsLoading={punchController.IsLoading}");
                 if (PlayerInventory.InstanceExists)
-                    MelonLogger.Msg($"[Minimap] FullMapView: equip diag on click - " +
+                    Log.Debug($"[Minimap] FullMapView: equip diag on click - " +
                         $"isAnythingEquipped={PlayerInventory.Instance.isAnythingEquipped}, " +
                         $"EquippedItem={(PlayerInventory.Instance.EquippedItem != null ? PlayerInventory.Instance.EquippedItem.ToString() : "null")}");
 
@@ -707,7 +707,7 @@ namespace ScheduleOneNavigator
                     Canvas tabCanvas = tabButtonRects.Length > 0 && tabButtonRects[0] != null
                         ? tabButtonRects[0].GetComponentInParent<Canvas>()
                         : null;
-                    MelonLogger.Msg($"[Minimap] FullMapView: tab click diag - canvas={(tabCanvas != null ? tabCanvas.name : "null")}, " +
+                    Log.Debug($"[Minimap] FullMapView: tab click diag - canvas={(tabCanvas != null ? tabCanvas.name : "null")}, " +
                         $"renderMode={(tabCanvas != null ? tabCanvas.renderMode.ToString() : "n/a")}, " +
                         $"worldCamera={(tabCanvas != null && tabCanvas.worldCamera != null ? tabCanvas.worldCamera.name : "null")}, " +
                         $"screen=({Screen.width}x{Screen.height})");
@@ -722,13 +722,13 @@ namespace ScheduleOneNavigator
                 // correctly) - also now logging RectangleContainsScreenPoint's
                 // actual return value per tab, the real function
                 // FindClickedTab relies on, instead of inferring a rect.
-                for (int i = 0; i < tabButtonRects.Length; i++)
+                for (int i = 0; Log.Verbose && i < tabButtonRects.Length; i++)
                 {
                     RectTransform tabRect = tabButtonRects[i];
                     if (tabRect == null)
                         continue;
                     bool hit = RectTransformUtility.RectangleContainsScreenPoint(tabRect, mousePos);
-                    MelonLogger.Msg($"[Minimap] FullMapView: tab[{i}] rect={tabRect.rect}, " +
+                    Log.Debug($"[Minimap] FullMapView: tab[{i}] rect={tabRect.rect}, " +
                         $"anchoredPosition={tabRect.anchoredPosition}, sizeDelta={tabRect.sizeDelta}, " +
                         $"worldPosition={tabRect.position}, lossyScale={tabRect.lossyScale}, " +
                         $"activeInHierarchy={tabRect.gameObject.activeInHierarchy}, hit={hit}, mousePos=({mousePos.x:F0},{mousePos.y:F0})");
@@ -744,7 +744,7 @@ namespace ScheduleOneNavigator
                     DealInfo clickedDealRow = FindClickedDealRow(mousePos);
                     if (clickedDealRow != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: deal row clicked -> {clickedDealRow.CustomerName}");
+                        Log.Debug($"[Minimap] FullMapView: deal row clicked -> {clickedDealRow.CustomerName}");
                         routePlanner.SetDestination(clickedDealRow.DeliveryPosition);
                     }
                     else if (RectTransformUtility.RectangleContainsScreenPoint(routeButtonRect, mousePos))
@@ -756,7 +756,7 @@ namespace ScheduleOneNavigator
                         Customer clickedCustomer = FindClickedCustomer(mousePos);
                         if (clickedCustomer != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: customer marker clicked -> {clickedCustomer.name}");
+                            Log.Debug($"[Minimap] FullMapView: customer marker clicked -> {clickedCustomer.name}");
                             routePlanner.SetDestination(clickedCustomer.transform.position);
                         }
                         else
@@ -764,7 +764,7 @@ namespace ScheduleOneNavigator
                             Customer clickedRecruitable = FindClickedRecruitableCustomer(mousePos);
                             if (clickedRecruitable != null)
                             {
-                                MelonLogger.Msg($"[Minimap] FullMapView: recruitable customer marker clicked -> {clickedRecruitable.name}");
+                                Log.Debug($"[Minimap] FullMapView: recruitable customer marker clicked -> {clickedRecruitable.name}");
                                 routePlanner.SetDestination(clickedRecruitable.transform.position);
                             }
                             else
@@ -779,7 +779,7 @@ namespace ScheduleOneNavigator
                     (Transform position, string name) clickedShopRow = FindClickedShopRow(mousePos);
                     if (clickedShopRow.position != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: shop row clicked -> {clickedShopRow.name} {clickedShopRow.position.position}");
+                        Log.Debug($"[Minimap] FullMapView: shop row clicked -> {clickedShopRow.name} {clickedShopRow.position.position}");
                         routePlanner.SetDestination(clickedShopRow.position.position);
                         selectedShop = clickedShopRow.position;
                         RefreshShops();
@@ -789,7 +789,7 @@ namespace ScheduleOneNavigator
                         (Transform position, string name) clickedShop = FindClickedShop(mousePos);
                         if (clickedShop.position != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: shop marker clicked -> {clickedShop.name} {clickedShop.position.position}");
+                            Log.Debug($"[Minimap] FullMapView: shop marker clicked -> {clickedShop.name} {clickedShop.position.position}");
                             routePlanner.SetDestination(clickedShop.position.position);
                             selectedShop = clickedShop.position;
                             RefreshShops();
@@ -805,7 +805,7 @@ namespace ScheduleOneNavigator
                     Business clickedBusinessRow = FindClickedBusinessRow(mousePos);
                     if (clickedBusinessRow != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: business row clicked -> {clickedBusinessRow.PropertyName}");
+                        Log.Debug($"[Minimap] FullMapView: business row clicked -> {clickedBusinessRow.PropertyName}");
                         routePlanner.SetDestination(clickedBusinessRow.transform.position);
                         selectedBusiness = clickedBusinessRow;
                         RefreshBusinessList();
@@ -815,7 +815,7 @@ namespace ScheduleOneNavigator
                         Business clickedBusiness = FindClickedBusiness(mousePos);
                         if (clickedBusiness != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: business marker clicked -> {clickedBusiness.PropertyName}");
+                            Log.Debug($"[Minimap] FullMapView: business marker clicked -> {clickedBusiness.PropertyName}");
                             routePlanner.SetDestination(clickedBusiness.transform.position);
                             selectedBusiness = clickedBusiness;
                             RefreshBusinessList();
@@ -831,7 +831,7 @@ namespace ScheduleOneNavigator
                     NPC clickedDealerRow = FindClickedDealerRow(mousePos);
                     if (clickedDealerRow != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: dealer row clicked -> {clickedDealerRow.FullName}");
+                        Log.Debug($"[Minimap] FullMapView: dealer row clicked -> {clickedDealerRow.FullName}");
                         routePlanner.SetDestination(clickedDealerRow.transform.position);
                         selectedDealer = clickedDealerRow;
                         RefreshDealerList();
@@ -841,7 +841,7 @@ namespace ScheduleOneNavigator
                         NPC clickedDealer = FindClickedDealer(mousePos);
                         if (clickedDealer != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: dealer marker clicked -> {clickedDealer.FullName}");
+                            Log.Debug($"[Minimap] FullMapView: dealer marker clicked -> {clickedDealer.FullName}");
                             routePlanner.SetDestination(clickedDealer.transform.position);
                             selectedDealer = clickedDealer;
                             RefreshDealerList();
@@ -857,7 +857,7 @@ namespace ScheduleOneNavigator
                     Property clickedPropertyRow = FindClickedPropertyRow(mousePos);
                     if (clickedPropertyRow != null)
                     {
-                        MelonLogger.Msg($"[Minimap] FullMapView: property row clicked -> {clickedPropertyRow.PropertyName}");
+                        Log.Debug($"[Minimap] FullMapView: property row clicked -> {clickedPropertyRow.PropertyName}");
                         routePlanner.SetDestination(ApplyPropertyPositionOverride(clickedPropertyRow.PropertyName, clickedPropertyRow.transform).position);
                         selectedProperty = clickedPropertyRow;
                         RefreshPropertyList();
@@ -867,7 +867,7 @@ namespace ScheduleOneNavigator
                         Property clickedProperty = FindClickedProperty(mousePos);
                         if (clickedProperty != null)
                         {
-                            MelonLogger.Msg($"[Minimap] FullMapView: property marker clicked -> {clickedProperty.PropertyName}");
+                            Log.Debug($"[Minimap] FullMapView: property marker clicked -> {clickedProperty.PropertyName}");
                             routePlanner.SetDestination(ApplyPropertyPositionOverride(clickedProperty.PropertyName, clickedProperty.transform).position);
                             selectedProperty = clickedProperty;
                             RefreshPropertyList();
@@ -939,7 +939,7 @@ namespace ScheduleOneNavigator
                 return;
             }
 
-            MelonLogger.Msg($"[Minimap] FullMapView click -> mapSpace {clickedMapPos}, world {world}, " +
+            Log.Debug($"[Minimap] FullMapView click -> mapSpace {clickedMapPos}, world {world}, " +
                 $"distFromPlayer {Vector3.Distance(ScheduleOneNavigatorMod.GetTrackedPosition(player), world):F1}m, zoom {zoom:F2}, " +
                 $"playerMapPos {playerMapPos}, mapContainer.anchoredPosition {mapContainer.anchoredPosition}, " +
                 $"mapContainer.sizeDelta {mapContainer.sizeDelta}");
@@ -1005,7 +1005,7 @@ namespace ScheduleOneNavigator
             if (!loggedSpriteDiag)
             {
                 loggedSpriteDiag = true;
-                MelonLogger.Msg($"[Minimap] FullMapView sprite diag: sprite.rect={sprite.rect}, " +
+                Log.Debug($"[Minimap] FullMapView sprite diag: sprite.rect={sprite.rect}, " +
                     $"sprite.texture=({sprite.texture.width}x{sprite.texture.height}), " +
                     $"MapDimensions={posUtil.MapDimensions}, mapContainer.sizeDelta={mapContainer.sizeDelta}");
             }
@@ -2216,7 +2216,7 @@ namespace ScheduleOneNavigator
 
             if (feasible.Count == 0)
             {
-                MelonLogger.Msg("[Minimap] FullMapView: optimal-route button clicked, but no deal is currently fulfillable with the inventory on hand.");
+                Log.Debug("[Minimap] FullMapView: optimal-route button clicked, but no deal is currently fulfillable with the inventory on hand.");
                 return;
             }
 
@@ -2225,7 +2225,7 @@ namespace ScheduleOneNavigator
             foreach (var d in ordered)
                 stops.Add(d.DeliveryPosition);
 
-            MelonLogger.Msg($"[Minimap] FullMapView: optimal route set through {stops.Count} deal(s): " +
+            Log.Debug($"[Minimap] FullMapView: optimal route set through {stops.Count} deal(s): " +
                 string.Join(" -> ", ordered.ConvertAll(d => d.CustomerName)));
             routePlanner.SetRoute(stops);
         }
@@ -2784,7 +2784,7 @@ namespace ScheduleOneNavigator
                     // unarmed punching isn't actually what's happening -
                     // check whether Equip(null) really unequipped, since the
                     // attack could be the (still-equipped) item's own.
-                    MelonLogger.Msg($"[Minimap] FullMapView: equip diag on open - " +
+                    Log.Debug($"[Minimap] FullMapView: equip diag on open - " +
                         $"savedEquippedSlot={(savedEquippedSlot != null ? "non-null" : "null")}, " +
                         $"isAnythingEquipped after Equip(null)={PlayerInventory.Instance.isAnythingEquipped}, " +
                         $"EquippedItem after Equip(null)={(PlayerInventory.Instance.EquippedItem != null ? PlayerInventory.Instance.EquippedItem.ToString() : "null")}");
@@ -2813,7 +2813,7 @@ namespace ScheduleOneNavigator
                 // live, so log hard facts instead of guessing a third time:
                 // was the controller even found, and did our call actually
                 // take effect this frame?
-                MelonLogger.Msg($"[Minimap] FullMapView: punch-block diag on open - " +
+                Log.Debug($"[Minimap] FullMapView: punch-block diag on open - " +
                     $"localPlayer={(localPlayer != null)}, punchController found={(punchController != null)}, " +
                     $"PunchingEnabled after SetPunchingEnabled(false)={(punchController != null ? punchController.PunchingEnabled.ToString() : "n/a")}");
             }
@@ -2916,7 +2916,7 @@ namespace ScheduleOneNavigator
             titleRT.offsetMax = new Vector2(-16f, 0f);
             Text titleText = titleGO.AddComponent<Text>();
             titleText.font = GetFont();
-            titleText.text = "Karte";
+            titleText.text = "Map";
             titleText.fontSize = 24;
             titleText.color = TitleColor;
             titleText.alignment = TextAnchor.MiddleLeft;
@@ -3127,7 +3127,7 @@ namespace ScheduleOneNavigator
 
             UpdatePanelForViewMode();
 
-            MelonLogger.Msg("[Minimap] FullMapView created.");
+            Log.Debug("[Minimap] FullMapView created.");
         }
 
         static Font GetFont()

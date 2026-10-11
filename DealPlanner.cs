@@ -143,7 +143,7 @@ namespace ScheduleOneNavigator
             if (result.Count == 0 && total > 0 && !loggedEmptyDiag)
             {
                 loggedEmptyDiag = true;
-                MelonLogger.Msg($"[Minimap] DealPlanner: no deals gathered - unlockedCustomers={total}, " +
+                Log.Debug($"[Minimap] DealPlanner: no deals gathered - unlockedCustomers={total}, " +
                     $"isAwaitingDelivery={awaiting}, hasCurrentContract={hasContract}, dealerNull={noDealer}, hasStandPoint={hasStandPoint}.");
             }
             else if (result.Count > 0)
@@ -188,7 +188,7 @@ namespace ScheduleOneNavigator
             var parts = new List<string>();
             foreach (var kv in byId)
                 parts.Add($"{kv.Value}x {kv.Key}");
-            MelonLogger.Msg($"[Minimap] DealPlanner: recognized product items in inventory: {total} ({string.Join(", ", parts)}).");
+            Log.Debug($"[Minimap] DealPlanner: recognized product items in inventory: {total} ({string.Join(", ", parts)}).");
 
             LogFullBreakdown("backpack", inv.GetAllInventorySlots());
             LogFullBreakdown("hotbar", inv.hotbarSlots);
@@ -234,7 +234,7 @@ namespace ScheduleOneNavigator
                     string mismatchKey = $"{entry.ProductID}|need{entry.Quantity}|have{have}";
                     if (loggedMismatches.Add(mismatchKey))
                     {
-                        MelonLogger.Msg($"[Minimap] DealPlanner: shortfall - deal wants {entry.Quantity}x " +
+                        Log.Debug($"[Minimap] DealPlanner: shortfall - deal wants {entry.Quantity}x " +
                             $"'{entry.ProductID}' (normalized '{normalized}'), inventory has {have}. " +
                             $"Currently held product IDs: [{string.Join(", ", inventoryByProductId.Keys)}].");
                     }
@@ -327,6 +327,8 @@ namespace ScheduleOneNavigator
         static void LogFullBreakdown<TSlot>(string label, Il2CppSystem.Collections.Generic.List<TSlot> slots)
             where TSlot : ItemSlot
         {
+            if (!Log.Verbose)
+                return;
             if (slots == null)
                 return;
 
@@ -335,12 +337,12 @@ namespace ScheduleOneNavigator
                 var slot = slots[i];
                 if (slot == null)
                 {
-                    MelonLogger.Msg($"[Minimap] DealPlanner: {label}[{i}] = null slot");
+                    Log.Debug($"[Minimap] DealPlanner: {label}[{i}] = null slot");
                     continue;
                 }
                 if (slot.ItemInstance == null)
                 {
-                    MelonLogger.Msg($"[Minimap] DealPlanner: {label}[{i}] empty");
+                    Log.Debug($"[Minimap] DealPlanner: {label}[{i}] empty");
                     continue;
                 }
 
@@ -358,7 +360,7 @@ namespace ScheduleOneNavigator
                     try { totalAmount = product.GetTotalAmount(); } catch { totalAmount = -1; }
                 }
 
-                MelonLogger.Msg($"[Minimap] DealPlanner: {label}[{i}] type={typeName}, id={id}, quantity={qty}, " +
+                Log.Debug($"[Minimap] DealPlanner: {label}[{i}] type={typeName}, id={id}, quantity={qty}, " +
                     $"totalAmount={totalAmount}, isProductItemInstance={product != null}");
             }
         }

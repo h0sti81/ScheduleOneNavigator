@@ -5,6 +5,16 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.7.1] - 2026-10-11
+
+- **Ruhiges Log**: die ausführlichen Diagnose-Ausgaben (Routen-Statistik alle
+  1,5 s, Klick-/Tab-Diagnosen, Inventarliste beim Öffnen des Handys) sind jetzt
+  standardmäßig aus. Für Fehlerberichte einschaltbar über
+  `VerboseLogging = true` in der Kategorie `[ScheduleOneNavigator]` von
+  `UserData/MelonPreferences.cfg`.
+- Kartentitel auf Englisch ("Map" statt "Karte"), passend zum Rest der
+  Oberfläche.
+
 ## [v0.7] - 2026-10-11
 
 - **Fahrzeugmodus für die Route**: sitzt man in einem Fahrzeug, bevorzugt die
@@ -95,7 +105,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden-Aura), Tablet-Overlay mit Tabs Deals/Shops/Businesses/Dealers/
   Eigentum, Auto-Routing über eigenes TerrainGrid-Pathfinding.
 
-[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...HEAD
+[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.1...HEAD
+[v0.7.1]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...v0.7.1
 [v0.7]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.6...v0.7
 [v0.6]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.5...v0.6
 [v0.5]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.4...v0.5

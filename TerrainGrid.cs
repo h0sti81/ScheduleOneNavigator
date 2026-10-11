@@ -194,7 +194,7 @@ namespace ScheduleOneNavigator
             walkableCellCount = 0;
             for (int i = 0; i < walkable.Length; i++)
                 if (walkable[i]) walkableCellCount++;
-            MelonLogger.Msg($"[Minimap] TerrainGrid baked: {cols}x{rows} cells ({CellSize}m each), margin={margin:F0}m, " +
+            Log.Debug($"[Minimap] TerrainGrid baked: {cols}x{rows} cells ({CellSize}m each), margin={margin:F0}m, " +
                 $"covering X[{minX:F0},{maxX:F0}] Z[{minZ:F0},{maxZ:F0}], " +
                 $"{walkableCellCount}/{walkable.Length} walkable ({roadCellCount} near roads), " +
                 $"non-walkable breakdown: {noGroundCount} no-ground, {waterCount} water, {obstructedCount} obstructed, " +
@@ -1039,7 +1039,7 @@ namespace ScheduleOneNavigator
                 return;
             lastFallbackStartIdx = startIdx;
             lastFallbackEndIdx = endIdx;
-            MelonLogger.Msg($"[Minimap] TerrainGrid: no direct path from player (isolated region {startComponentSize} " +
+            Log.Debug($"[Minimap] TerrainGrid: no direct path from player (isolated region {startComponentSize} " +
                 $"cells) - falling back to nearest reachable point in destination's region ({endComponentSize} cells).");
         }
 
@@ -1118,12 +1118,12 @@ namespace ScheduleOneNavigator
                     }
                 }
             }
-            MelonLogger.Msg($"[Minimap] TerrainGrid: local reason breakdown around {label} cell (col={centerCol},row={centerRow}), " +
+            Log.Debug($"[Minimap] TerrainGrid: local reason breakdown around {label} cell (col={centerCol},row={centerRow}), " +
                 $"{LocalBreakdownRadiusCells * 2 + 1}x{LocalBreakdownRadiusCells * 2 + 1} box - " +
                 $"{ok} walkable, {noGround} no-ground, {water} water, {obstructed} obstructed, {outOfBounds} out-of-bounds.");
             if (waterColor.Count > 0 || walkableColor.Count > 0)
             {
-                MelonLogger.Msg($"[Minimap] TerrainGrid: color calibration around {label} cell - " +
+                Log.Debug($"[Minimap] TerrainGrid: color calibration around {label} cell - " +
                     $"water-labeled: {waterColor}; walkable-labeled: {walkableColor}");
             }
         }
@@ -1241,7 +1241,7 @@ namespace ScheduleOneNavigator
                     }
                 }
             }
-            MelonLogger.Msg($"[Minimap] TerrainGrid: {label} component ({component.Count} cells) boundary - " +
+            Log.Debug($"[Minimap] TerrainGrid: {label} component ({component.Count} cells) boundary - " +
                 $"{crossings} edges to outside walkable cells: {orthBlocked} orthogonal-edge-blocked, " +
                 $"{diagBlocked} diagonal-edge-blocked, {cornerOrthBlocked} corner-neighbour-unwalkable, " +
                 $"{unblocked} UNEXPECTEDLY UNBLOCKED (logic mismatch if nonzero).");

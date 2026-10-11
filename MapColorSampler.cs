@@ -74,7 +74,7 @@ namespace ScheduleOneNavigator
             cachedSprite = sprite;
             Object.Destroy(readable); // only the managed Color32[] needs to survive
 
-            MelonLogger.Msg($"[Minimap] MapColorSampler: cached {texWidth}x{texHeight} map texture " +
+            Log.Debug($"[Minimap] MapColorSampler: cached {texWidth}x{texHeight} map texture " +
                 $"({mapPixels.Length * 4 / 1024 / 1024}MB), {sw.ElapsedMilliseconds}ms.");
         }
 

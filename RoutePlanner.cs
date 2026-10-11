@@ -54,12 +54,12 @@ namespace ScheduleOneNavigator
             {
                 if (queuedStops.Count > 0)
                 {
-                    MelonLogger.Msg($"[Minimap] Stop reached, {queuedStops.Count} more queued - advancing.");
+                    Log.Debug($"[Minimap] Stop reached, {queuedStops.Count} more queued - advancing.");
                     SetDestinationInternal(queuedStops.Dequeue());
                 }
                 else
                 {
-                    MelonLogger.Msg("[Minimap] Destination reached, clearing route.");
+                    Log.Debug("[Minimap] Destination reached, clearing route.");
                     ClearRoute();
                 }
                 return;
@@ -125,7 +125,7 @@ namespace ScheduleOneNavigator
             if (inVehicle != lastInVehicle)
             {
                 lastInVehicle = inVehicle;
-                MelonLogger.Msg($"[Minimap] Route mode: {(inVehicle ? "vehicle (roads strongly preferred)" : "on foot")}.");
+                Log.Debug($"[Minimap] Route mode: {(inVehicle ? "vehicle (roads strongly preferred)" : "on foot")}.");
             }
 
             var raw = TerrainGrid.FindPath(start, end, inVehicle, out string failReason);
@@ -152,7 +152,7 @@ namespace ScheduleOneNavigator
             waypoints.Add(raw[raw.Count - 1]); // recursive simplify only adds the start of each kept segment
 
             float endOffset = Vector3.Distance(raw[raw.Count - 1], destination);
-            MelonLogger.Msg($"[Minimap] Path found: {raw.Count} raw cells -> {waypoints.Count} after simplify. " +
+            Log.Debug($"[Minimap] Path found: {raw.Count} raw cells -> {waypoints.Count} after simplify. " +
                 $"Requested dest {destination}, actual path end {raw[raw.Count - 1]}, snap offset {endOffset:F1}m.");
         }
 
