@@ -160,6 +160,7 @@ namespace ScheduleOneNavigator
         Sprite businessSprite;
         readonly List<Business> currentBusinesses = new List<Business>();
         readonly List<(RectTransform rect, Business business)> businessRows = new List<(RectTransform, Business)>();
+        readonly List<RectTransform> businessHeaderRows = new List<RectTransform>();
         Business selectedBusiness;
         float businessRefreshTimer;
 
@@ -1282,11 +1283,13 @@ namespace ScheduleOneNavigator
         // own - see the Shops tab below, and session notes from 2026-09-18).
         void RefreshBusinessMarkers()
         {
+            // Owned only, like RefreshPropertyMarkers - for-sale businesses
+            // stay in the list (with price) but get no map marker.
             var allBusinesses = Business.Businesses;
             HashSet<Business> current = new HashSet<Business>();
             if (allBusinesses != null)
                 foreach (Business b in allBusinesses)
-                    if (b != null)
+                    if (b != null && b.IsOwned)
                         current.Add(b);
 
             List<Business> stale = null;
@@ -2301,36 +2304,83 @@ namespace ScheduleOneNavigator
         // businesses don't have those).
         void RefreshBusinessList()
         {
+            // Business.Businesses lists every laundering front in the game,
+            // bought or not (it's a Property subclass, so IsOwned/Price are
+            // there) - grouped like the Properties tab so an unbought one
+            // (e.g. Hyland Medical, still for sale at Ray's) no longer reads
+            // as yours.
             currentBusinesses.Clear();
+            var ownedGroup = new List<Business>();
+            var forSaleGroup = new List<Business>();
             var allBusinesses = Business.Businesses;
             if (allBusinesses != null)
                 foreach (Business b in allBusinesses)
                     if (b != null)
-                        currentBusinesses.Add(b);
+                        (b.IsOwned ? ownedGroup : forSaleGroup).Add(b);
+            ownedGroup.Sort((a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
+            forSaleGroup.Sort((a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
+            currentBusinesses.AddRange(ownedGroup);
+            currentBusinesses.AddRange(forSaleGroup);
 
             var businessSig = new System.Text.StringBuilder();
             foreach (Business b in currentBusinesses)
-                businessSig.Append(b.GetInstanceID()).Append('|').Append(b.PropertyName).Append('|').Append(b == selectedBusiness).Append(';');
+                businessSig.Append(b.GetInstanceID()).Append('|').Append(b.PropertyName).Append('|').Append(b.IsOwned)
+                    .Append('|').Append(b.Price).Append('|').Append(b == selectedBusiness).Append(';');
             if (SameListSignature(ref businessListSignature, businessSig.ToString()))
                 return;
 
             foreach (var row in businessRows)
                 GameObject.Destroy(row.rect.gameObject);
             businessRows.Clear();
+            foreach (var header in businessHeaderRows)
+                GameObject.Destroy(header.gameObject);
+            businessHeaderRows.Clear();
 
-            for (int i = 0; i < currentBusinesses.Count; i++)
+            float y = 0f;
+
+            void AddHeader(string label)
             {
-                Business business = currentBusinesses[i];
+                GameObject headerGO = new GameObject("BusinessHeader");
+                headerGO.transform.SetParent(dealListContainer, false);
+                RectTransform headerRT = headerGO.AddComponent<RectTransform>();
+                headerRT.anchorMin = new Vector2(0f, 1f);
+                headerRT.anchorMax = new Vector2(1f, 1f);
+                headerRT.pivot = new Vector2(0.5f, 1f);
+                headerRT.anchoredPosition = new Vector2(0f, -y);
+                headerRT.sizeDelta = new Vector2(0f, SectionHeaderRowHeight);
+                headerGO.AddComponent<Image>().color = SectionHeaderRowColor;
 
+                GameObject textGO = new GameObject("Text");
+                textGO.transform.SetParent(headerGO.transform, false);
+                RectTransform textRT = textGO.AddComponent<RectTransform>();
+                textRT.anchorMin = Vector2.zero;
+                textRT.anchorMax = Vector2.one;
+                textRT.offsetMin = new Vector2(8f, 0f);
+                textRT.offsetMax = new Vector2(-8f, 0f);
+                Text text = textGO.AddComponent<Text>();
+                text.font = GetFont();
+                text.text = label;
+                text.fontSize = 13;
+                text.fontStyle = FontStyle.Bold;
+                text.color = SectionHeaderTextColor;
+                text.alignment = TextAnchor.MiddleLeft;
+
+                businessHeaderRows.Add(headerRT);
+                y += SectionHeaderRowHeight;
+            }
+
+            void AddRow(Business business)
+            {
                 GameObject rowGO = new GameObject("BusinessRow");
                 rowGO.transform.SetParent(dealListContainer, false);
                 RectTransform rowRT = rowGO.AddComponent<RectTransform>();
                 rowRT.anchorMin = new Vector2(0f, 1f);
                 rowRT.anchorMax = new Vector2(1f, 1f);
                 rowRT.pivot = new Vector2(0.5f, 1f);
-                rowRT.anchoredPosition = new Vector2(0f, -i * BusinessRowHeight);
+                rowRT.anchoredPosition = new Vector2(0f, -y);
                 rowRT.sizeDelta = new Vector2(0f, BusinessRowHeight - 4f);
-                rowGO.AddComponent<Image>().color = business == selectedBusiness ? Highlight(BusinessRowColor) : BusinessRowColor;
+                Color baseColor = business.IsOwned ? PropertyRowOwnedColor : BusinessRowColor;
+                rowGO.AddComponent<Image>().color = business == selectedBusiness ? Highlight(baseColor) : baseColor;
 
                 GameObject nameGO = new GameObject("Name");
                 nameGO.transform.SetParent(rowGO.transform, false);
@@ -2341,23 +2391,37 @@ namespace ScheduleOneNavigator
                 nameRT.offsetMax = new Vector2(-8f, 0f);
                 Text nameText = nameGO.AddComponent<Text>();
                 nameText.font = GetFont();
-                nameText.text = business.PropertyName;
+                nameText.text = business.IsOwned ? business.PropertyName : $"{business.PropertyName} (${business.Price:F0})";
                 nameText.fontSize = 15;
-                nameText.color = DealRowTextColor;
+                nameText.color = business.IsOwned ? DealRowTextColor : DealRowSubTextColor;
                 nameText.alignment = TextAnchor.MiddleLeft;
                 nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
                 nameText.verticalOverflow = VerticalWrapMode.Truncate;
 
                 businessRows.Add((rowRT, business));
+                y += BusinessRowHeight;
             }
 
-            dealListContainer.sizeDelta = new Vector2(0f, currentBusinesses.Count * BusinessRowHeight);
+            if (ownedGroup.Count > 0)
+            {
+                AddHeader("Owned");
+                foreach (Business b in ownedGroup)
+                    AddRow(b);
+            }
+            if (forSaleGroup.Count > 0)
+            {
+                AddHeader("For sale");
+                foreach (Business b in forSaleGroup)
+                    AddRow(b);
+            }
+
+            dealListContainer.sizeDelta = new Vector2(0f, y);
         }
 
         Business FindClickedBusinessRow(Vector2 screenPoint)
         {
             foreach (var row in businessRows)
-                if (row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
+                if (row.business.IsOwned && row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
                     return row.business;
             return null;
         }
@@ -2720,6 +2784,8 @@ namespace ScheduleOneNavigator
                 row.rect.gameObject.SetActive(viewMode == MapViewMode.Shops);
             foreach (var row in businessRows)
                 row.rect.gameObject.SetActive(viewMode == MapViewMode.Businesses);
+            foreach (var header in businessHeaderRows)
+                header.gameObject.SetActive(viewMode == MapViewMode.Businesses);
             foreach (var row in dealerRows)
                 row.rect.gameObject.SetActive(viewMode == MapViewMode.Dealers);
             foreach (var header in dealerHeaderRows)

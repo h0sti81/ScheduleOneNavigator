@@ -5,6 +5,13 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+## [v0.7.2] - 2026-10-11
+
+- **Biz-Tab unterscheidet jetzt gekauft/nicht gekauft**: bisher wurden alle
+  Businesses des Spiels als eigene angezeigt, auch noch nicht gekaufte (z. B.
+  Hyland Medical). Jetzt gruppiert in "Owned" und "For sale" (mit Preis, nicht
+  anklickbar), Kartenmarker nur noch für gekaufte - wie im Properties-Tab.
+
 ## [v0.7.1] - 2026-10-11
 
 - **Ruhiges Log**: die ausführlichen Diagnose-Ausgaben (Routen-Statistik alle
@@ -114,7 +121,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Kunden-Aura), Tablet-Overlay mit Tabs Deals/Shops/Businesses/Dealers/
   Eigentum, Auto-Routing über eigenes TerrainGrid-Pathfinding.
 
-[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.2...HEAD
+[v0.7.2]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7.1...v0.7.2
 [v0.7.1]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.7...v0.7.1
 [v0.7]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.6...v0.7
 [v0.6]: https://github.com/h0sti81/ScheduleOneNavigator/compare/v0.5...v0.6

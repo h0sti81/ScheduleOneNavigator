@@ -11,7 +11,7 @@ A full-screen map and navigation overlay for **Schedule I**, built on top of [Me
 - **Vehicle-aware routing**: on foot, routes go anywhere you can walk (lightly preferring roads and sidewalks); in a vehicle they take the shortest way onto the road network and stay on it until close to the destination.
 - **Deals tab**: your currently active delivery contracts (plus deals already scheduled but not yet awaiting delivery), with an "optimal route" button that orders all fulfillable deals into a single efficient route based on what's in your inventory. Recruitable customers are shown here too (red aura) and can be clicked to route to them.
 - **Shops tab**: real in-world retail locations (gas stations, hardware stores, clothing, pawn shop, casino, barbershop, tattoo parlor, auto dealerships, ...), click a marker or list entry to route to it.
-- **Businesses tab**: your production properties (warehouse, sweatshop, motel, etc.).
+- **Businesses tab**: your money-laundering fronts (laundromat, car wash, ...); ones still for sale are listed with their price.
 - **Dealers & Suppliers tab**: every dealer and supplier NPC, grouped and sorted, with a clear visual indicator for which ones you've already unlocked.
 - **Properties tab**: every property in the game, grouped into owned/not-yet-owned - owned ones are fully navigable, unowned ones show their price and are grayed out.
 - Other connected players are shown as a green dot (with name label) on both the minimap and the full map.
