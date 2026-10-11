@@ -101,6 +101,7 @@ namespace ScheduleOneNavigator
         // re-enter this same Postfix and recurse (same failure shape as the
         // right-click freeze MapAppSetOpenPatch already guards against).
         static bool closingFullMapView;
+        static bool closingMapApp;
 
         // Parameter named __0 (Harmony's name-independent positional
         // convention), NOT "open" - confirmed live 2026-09-20 via the
@@ -181,6 +182,32 @@ namespace ScheduleOneNavigator
                 finally
                 {
                     closingFullMapView = false;
+                }
+            }
+
+            // Closing the phone (TAB, or the game's own M handling) leaves
+            // the Map app itself open inside it. The next TAB then reopened
+            // the phone straight into that app - and since MapApp.SetOpen
+            // isn't called again, the old native map screen showed instead of
+            // ours, until a right-click finally closed the app. Close the app
+            // properly whenever the phone goes away, so TAB always comes back
+            // to the home screen. closingViaOwnKeyHandling keeps the
+            // MapApp.SetOpen prefix out of it; the overlay is already hidden,
+            // so SetVisible(false) from the postfix is a no-op.
+            if (!__0 && !closingMapApp && MapApp.Instance != null && MapApp.Instance.isOpen)
+            {
+                closingMapApp = true; // RequestCloseApp could route back through SetIsOpen - don't recurse
+                FullMapView.closingViaOwnKeyHandling = true;
+                try
+                {
+                    Phone.Instance?.RequestCloseApp();
+                    if (MapApp.Instance.isOpen)
+                        MapApp.Instance.SetOpen(false);
+                }
+                finally
+                {
+                    FullMapView.closingViaOwnKeyHandling = false;
+                    closingMapApp = false;
                 }
             }
         }

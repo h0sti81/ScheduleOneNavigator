@@ -5,6 +5,16 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+- **TAB-Eigenheit behoben**: wurde die Karte mit M geöffnet und wieder
+  geschlossen, öffnete TAB danach die alte Spielkarte statt des Handys - so
+  lange, bis eine Karte per Rechtsklick geschlossen wurde. Ursache: beim
+  Schließen des Handys blieb die Karten-App darin geöffnet. Sie wird jetzt mit
+  geschlossen, TAB öffnet wieder zuverlässig den Handy-Homescreen.
+- Nach Esc/Rechtsklick und anschließendem Schließen per TAB werden Bewegung
+  und Ausrüstung jetzt zuverlässig wieder freigegeben.
+- README: Bedienung korrigiert (M bzw. Map-App öffnet die Karte, M/TAB
+  schließt, Esc/Rechtsklick zurück zum Handy).
+
 ## [v0.7.3] - 2026-10-11
 
 - **Optimale Route rechnet mit dem echten Vorrat**: bisher wurde jeder Deal

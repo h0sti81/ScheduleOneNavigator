@@ -479,9 +479,24 @@ namespace ScheduleOneNavigator
             {
                 pendingMClose = false;
                 closeToPhoneHome = false;
+                // RequestCloseApp() first, like Escape: it unregisters the
+                // map as the phone's active app and returns to the home
+                // screen. Closing with only MapApp.SetOpen(false) left
+                // Phone.ActiveApp pointing at the map, so TAB afterwards
+                // toggled the old native map instead of the phone, until a
+                // right-click close (which does go through RequestCloseApp)
+                // reset it. closeToPhoneHome stays false, so SetVisible(false)
+                // still closes the whole phone back to gameplay.
                 closingViaOwnKeyHandling = true;
-                MapApp.Instance?.SetOpen(false);
-                closingViaOwnKeyHandling = false;
+                try
+                {
+                    Phone.Instance?.RequestCloseApp();
+                    MapApp.Instance?.SetOpen(false);
+                }
+                finally
+                {
+                    closingViaOwnKeyHandling = false;
+                }
                 return;
             }
 
@@ -3004,6 +3019,11 @@ namespace ScheduleOneNavigator
         // app, not a key press (see Tick()).
         internal void SetVisible(bool value)
         {
+            // Closing can now arrive twice in a row (RequestCloseApp() closes
+            // the map app itself, then the explicit SetOpen(false)); the
+            // close branch must only run once, or it would re-equip/re-close.
+            if (!value && !visible)
+                return;
             visible = value;
             if (visible)
                 EnsureCreated();
@@ -3145,6 +3165,12 @@ namespace ScheduleOneNavigator
                     PlayerInventory.Instance.SetEquippingEnabled(true);
                 }
             }
+
+            // One-shot: consumed by this close. It used to stay true after an
+            // Escape/right-click, so a later TAB close took the "back to the
+            // phone home screen" branch and never gave movement/equipment back.
+            if (!value)
+                closeToPhoneHome = false;
         }
 
         void EnsureCreated()
