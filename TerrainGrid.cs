@@ -198,6 +198,7 @@ namespace ScheduleOneNavigator
                 $"covering X[{minX:F0},{maxX:F0}] Z[{minZ:F0},{maxZ:F0}], " +
                 $"{walkableCellCount}/{walkable.Length} walkable ({roadCellCount} near roads), " +
                 $"non-walkable breakdown: {noGroundCount} no-ground, {waterCount} water, {obstructedCount} obstructed, " +
+                $"step {bakedStepOffset:F2}m / slope tan {bakedSlopeTan:F2}, " +
                 $"{sw.ElapsedMilliseconds}ms.");
             return true;
         }
@@ -210,13 +211,19 @@ namespace ScheduleOneNavigator
 
             float radius = 0.4f;
             float height = 1.8f;
+            float stepOffset = 0.3f;
+            float slopeLimit = 45f;
             CharacterController controller = PlayerMovement.Instance.Controller;
             if (controller != null)
             {
                 radius = controller.radius;
                 height = controller.height;
+                stepOffset = controller.stepOffset;
+                slopeLimit = controller.slopeLimit;
             }
             bakedObstacleRadius = radius;
+            bakedStepOffset = stepOffset;
+            bakedSlopeTan = Mathf.Tan(Mathf.Clamp(slopeLimit, 0f, 60f) * Mathf.Deg2Rad);
             bakedObstacleHeight = height * ObstacleCheckHeightMargin;
             bakedGroundMask = PlayerMovement.Instance.GroundDetectionMask;
 
@@ -430,6 +437,19 @@ namespace ScheduleOneNavigator
         // actual vertical face between two very differently-grounded
         // sub-points.
         const float SlopeRefineHeightThreshold = 0.3f;
+
+        // Each refined sub-step may rise or drop at most what the player's
+        // CharacterController can actually climb (step offset, or the slope
+        // limit over the sub-step's horizontal length, plus a little slack
+        // for raycast noise). Without this, the capsule sweeps alone let an
+        // edge from the ground straight onto a flat roof pass - stepping
+        // OFF a roof edge hits nothing, and edges are bidirectional - so
+        // routes cut across buildings over their roofs. Drops are capped
+        // too: the grid has no one-way edges, and a drop you can't climb
+        // back up is the same wall from the other side.
+        const float StepHeightSlack = 0.15f;
+        static float bakedStepOffset;
+        static float bakedSlopeTan;
         const int EdgeRefineSubsteps = 4; // ~0.5m spacing across a 2m edge
 
         static bool EdgeBlocked(Vector3 feetA, Vector3 feetB)
@@ -443,6 +463,9 @@ namespace ScheduleOneNavigator
                     new Vector3(feetB.x, sweepY, feetB.z));
             }
 
+            float subStepLength = new Vector2(feetB.x - feetA.x, feetB.z - feetA.z).magnitude / EdgeRefineSubsteps;
+            float maxRise = Mathf.Max(bakedStepOffset, subStepLength * bakedSlopeTan) + StepHeightSlack;
+
             Vector3 prev = feetA;
             for (int i = 1; i <= EdgeRefineSubsteps; i++)
             {
@@ -451,6 +474,8 @@ namespace ScheduleOneNavigator
                 float z = Mathf.Lerp(feetA.z, feetB.z, t);
                 Vector3 cur = ReGround(x, z, prev);
 
+                if (Mathf.Abs(cur.y - prev.y) > maxRise)
+                    return true;
                 if (SegmentBlocked(prev, cur))
                     return true;
 

@@ -13,6 +13,11 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   anklickbar), Kartenmarker nur noch für gekaufte - wie im Properties-Tab.
 - **Supplier "(out of town)" nicht mehr anklickbar**: sie haben keinen
   Standort, zu dem eine Route führen könnte.
+- **Keine Routen mehr über Dächer**: Übergänge zwischen Rasterzellen hatten
+  keine maximale Stufenhöhe - vom Dach "fallen" ist kollisionsfrei, und da
+  Übergänge in beide Richtungen gelten, führten Routen über flache Dächer
+  quer durch Gebäude. Jetzt darf jeder Teilschritt nur so viel steigen/fallen,
+  wie die Spielfigur wirklich schafft (Stufenhöhe bzw. Steigung).
 
 ## [v0.7.1] - 2026-10-11
 
