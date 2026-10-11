@@ -11,6 +11,8 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Businesses des Spiels als eigene angezeigt, auch noch nicht gekaufte (z. B.
   Hyland Medical). Jetzt gruppiert in "Owned" und "For sale" (mit Preis, nicht
   anklickbar), Kartenmarker nur noch für gekaufte - wie im Properties-Tab.
+- **Supplier "(out of town)" nicht mehr anklickbar**: sie haben keinen
+  Standort, zu dem eine Route führen könnte.
 
 ## [v0.7.1] - 2026-10-11
 

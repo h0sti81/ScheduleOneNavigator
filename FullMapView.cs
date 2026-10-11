@@ -1379,6 +1379,10 @@ namespace ScheduleOneNavigator
 
         enum DealerAvailability { Locked, Unlocked, Recruited }
 
+        // Same condition RefreshDealerList uses for the "(out of town)" label.
+        bool IsOutOfTownSupplier(NPC npc) =>
+            npc != null && GetDealerAvailability(npc) == DealerAvailability.Unlocked && IsSupplierNpc(npc);
+
         // Three-state read of a Dealer/Supplier row's real status, shared by
         // RefreshDealerMarkers and RefreshDealerList so the two can't drift.
         // Real Dealers have a genuine three-state lifecycle
@@ -2576,8 +2580,10 @@ namespace ScheduleOneNavigator
 
         NPC FindClickedDealerRow(Vector2 screenPoint)
         {
+            // Suppliers shown "(out of town)" have no position to route to -
+            // not clickable, like for-sale rows in the Biz/Properties tabs.
             foreach (var row in dealerRows)
-                if (row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
+                if (!IsOutOfTownSupplier(row.npc) && row.rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(row.rect, screenPoint))
                     return row.npc;
             return null;
         }
