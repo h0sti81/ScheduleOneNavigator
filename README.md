@@ -13,7 +13,7 @@ A full-screen map and navigation overlay for **Schedule I**, built on top of [Me
 - **Shops tab**: real in-world retail locations (gas stations, hardware stores, clothing, pawn shop, casino, barbershop, tattoo parlor, auto dealerships, ...), click a marker or list entry to route to it.
 - **Businesses tab**: your production properties (warehouse, sweatshop, motel, etc.).
 - **Dealers & Suppliers tab**: every dealer and supplier NPC, grouped and sorted, with a clear visual indicator for which ones you've already unlocked.
-- **Properties tab ("Eigentum")**: every property in the game, grouped into owned/not-yet-owned - owned ones are fully navigable, unowned ones show their price and are grayed out.
+- **Properties tab**: every property in the game, grouped into owned/not-yet-owned - owned ones are fully navigable, unowned ones show their price and are grayed out.
 - Other connected players are shown as a green dot (with name label) on both the minimap and the full map.
 
 ## Requirements
@@ -35,7 +35,7 @@ MelonLoader works the same way whether you're on Windows or on Linux/Steam Deck 
 ## Usage
 
 - Open your phone as usual and tap the "N" app icon to open the full map overlay.
-- Click a tab (Deals / Shops / Businesses / Dealers / Eigentum) to switch views.
+- Click a tab (Deals / Shops / Biz / Dealers / Properties) to switch views.
 - Click anywhere on the map, or on a marker/list row, to set a route there. Press `Esc` or close the phone to close it.
 - Right-click-drag to pan the map.
 

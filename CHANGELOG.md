@@ -12,8 +12,9 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   standardmäßig aus. Für Fehlerberichte einschaltbar über
   `VerboseLogging = true` in der Kategorie `[ScheduleOneNavigator]` von
   `UserData/MelonPreferences.cfg`.
-- Kartentitel auf Englisch ("Map" statt "Karte"), passend zum Rest der
-  Oberfläche.
+- **Oberfläche komplett auf Englisch**: Kartentitel, Listenüberschriften
+  (Current/Scheduled, Owned/For sale), Deal-Status, Routen-Button, Hinweiszeile
+  und Dealer-Status.
 - **Ruckler bei offener Karte behoben**: die Listen im linken Bereich wurden
   jede Sekunde komplett zerstört und neu aufgebaut (inkl. Neuaufbau der
   ganzen Oberfläche), im Shops-Tab dazu vier Szenen-Suchen pro Sekunde.

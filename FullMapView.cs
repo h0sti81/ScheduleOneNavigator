@@ -2222,7 +2222,7 @@ namespace ScheduleOneNavigator
                 tagRT.offsetMax = new Vector2(-8f, 0f);
                 Text tagText = tagGO.AddComponent<Text>();
                 tagText.font = GetFont();
-                tagText.text = deal.Feasible ? "erfüllbar" : "fehlt Ware";
+                tagText.text = deal.Feasible ? "ready" : "missing product";
                 tagText.fontSize = 11;
                 tagText.color = deal.Feasible ? DealFeasibleTagColor : DealInfeasibleTagColor;
                 tagText.alignment = TextAnchor.MiddleLeft;
@@ -2233,13 +2233,13 @@ namespace ScheduleOneNavigator
 
             if (currentGroup.Count > 0)
             {
-                AddHeader("Aktuell");
+                AddHeader("Current");
                 foreach (DealInfo deal in currentGroup)
                     AddRow(deal);
             }
             if (plannedGroup.Count > 0)
             {
-                AddHeader("Geplant");
+                AddHeader("Scheduled");
                 foreach (DealInfo deal in plannedGroup)
                     AddRow(deal);
             }
@@ -2269,8 +2269,8 @@ namespace ScheduleOneNavigator
 
             routeButtonImage.color = feasibleCount > 0 ? RouteButtonColor : RouteButtonDisabledColor;
             routeButtonText.text = feasibleCount > 0
-                ? $"Optimale Route ({feasibleCount})"
-                : "Optimale Route (keine Ware)";
+                ? $"Optimal route ({feasibleCount})"
+                : "Optimal route (no product)";
         }
 
         void HandleOptimalRouteButtonClicked(Player player)
@@ -2481,7 +2481,7 @@ namespace ScheduleOneNavigator
                     DealerAvailability.Recruited => npc.FullName,
                     DealerAvailability.Unlocked => IsSupplierNpc(npc)
                         ? $"{npc.FullName} (out of town)"
-                        : $"{npc.FullName} (nicht angeheuert)",
+                        : $"{npc.FullName} (not hired)",
                     _ => npc.FullName,
                 };
                 nameText.fontSize = 15;
@@ -2625,13 +2625,13 @@ namespace ScheduleOneNavigator
 
             if (ownedGroup.Count > 0)
             {
-                AddHeader("Gekauft");
+                AddHeader("Owned");
                 foreach (Property p in ownedGroup)
                     AddRow(p);
             }
             if (unownedGroup.Count > 0)
             {
-                AddHeader("Nicht gekauft");
+                AddHeader("For sale");
                 foreach (Property p in unownedGroup)
                     AddRow(p);
             }
@@ -2692,12 +2692,12 @@ namespace ScheduleOneNavigator
         {
             dealTitleText.text = viewMode switch
             {
-                MapViewMode.Deals => "Aktuelle Deals",
+                MapViewMode.Deals => "Active deals",
                 MapViewMode.Shops => "Shops",
                 MapViewMode.Businesses => "Businesses",
                 MapViewMode.Dealers => "Dealer & Supplier",
                 MapViewMode.Properties => "Properties",
-                _ => "Bald verfügbar",
+                _ => "Coming soon",
             };
 
             bool showRouteButton = viewMode == MapViewMode.Deals;
@@ -3018,7 +3018,7 @@ namespace ScheduleOneNavigator
             footerRT.sizeDelta = new Vector2(-BezelPadding * 2f, FooterHeight);
             Text hint = footerGO.AddComponent<Text>();
             hint.font = GetFont();
-            hint.text = "Linksklick: Ziel setzen    |    ESC / M: Schließen";
+            hint.text = "Left click: set destination    |    Esc / M: close";
             hint.fontSize = 15;
             hint.color = HintColor;
             hint.alignment = TextAnchor.MiddleCenter;
@@ -3163,7 +3163,7 @@ namespace ScheduleOneNavigator
             dealTitleRT.sizeDelta = new Vector2(-16f, DealListTitleHeight);
             dealTitleText = dealTitleGO.AddComponent<Text>();
             dealTitleText.font = GetFont();
-            dealTitleText.text = "Aktuelle Deals";
+            dealTitleText.text = "Active deals";
             dealTitleText.fontSize = 16;
             dealTitleText.color = TitleColor;
             dealTitleText.alignment = TextAnchor.MiddleLeft;
@@ -3207,7 +3207,7 @@ namespace ScheduleOneNavigator
             routeButtonTextRT.offsetMax = Vector2.zero;
             routeButtonText = routeButtonTextGO.AddComponent<Text>();
             routeButtonText.font = GetFont();
-            routeButtonText.text = "Optimale Route";
+            routeButtonText.text = "Optimal route";
             routeButtonText.fontSize = 15;
             routeButtonText.color = TitleColor;
             routeButtonText.alignment = TextAnchor.MiddleCenter;
