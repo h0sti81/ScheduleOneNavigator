@@ -5,6 +5,11 @@ angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased]
 
+- **Crash-Info-Sammler** `tools/CollectCrashInfo.bat`: Doppelklick sammelt
+  MelonLoader-Logs, Unity-Player.log und Crash-Reports, Windows-Absturzereignisse,
+  Mod-Liste, Spielversion/Branch und Systeminfos in ein ZIP auf dem Desktop
+  (Windows-Benutzername wird aus den Logs entfernt). Für Bug-Reports.
+
 ## [v0.7.4] - 2026-10-11
 
 - **TAB-Eigenheit behoben**: wurde die Karte mit M geöffnet und wieder

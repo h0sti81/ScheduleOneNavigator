@@ -41,6 +41,8 @@ MelonLoader works the same way whether you're on Windows or on Linux/Steam Deck 
 
 ## Troubleshooting / bug reports
 
+**Crashes or errors:** download `CollectCrashInfo.bat` (from the [releases page](https://github.com/h0sti81/ScheduleOneNavigator/releases) or [`tools/`](tools/CollectCrashInfo.bat)) and double-click it after the problem happened. It finds your game folder, collects the MelonLoader logs, Unity's `Player.log` and crash reports, Windows' crash events and a list of installed mods, and puts everything into one zip on your desktop - attach that zip to your report. Nothing is uploaded, and your Windows user name is removed from the logs. (Windows only; on Linux/Proton please attach `MelonLoader/Latest.log` by hand.)
+
 The mod keeps the MelonLoader log quiet by default. To get detailed pathfinding and UI diagnostics for a bug report, start the game once with the mod installed, then set this in `UserData/MelonPreferences.cfg` and restart:
 
 ```
